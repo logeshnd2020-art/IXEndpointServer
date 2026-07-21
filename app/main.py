@@ -8,6 +8,7 @@ from app.api.session import router as session_router
 from app.api.idle import router as idle_router
 from app.api.activity import router as activity_router
 from app.api.dashboard import router as dashboard_router
+from app.api.auth import router as auth_router
 
 import app.models
 
@@ -27,6 +28,7 @@ app.include_router(session_router)
 app.include_router(idle_router)
 app.include_router(activity_router)
 app.include_router(dashboard_router)
+app.include_router(auth_router)
 
 @app.get("/")
 def root():
