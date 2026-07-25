@@ -1,6 +1,5 @@
-import uuid
-
 from datetime import datetime, timezone
+from typing import List
 
 from sqlalchemy.orm import Session
 
@@ -18,7 +17,7 @@ from app.schemas.device import (
 class DeviceService:
 
     @staticmethod
-    def create_device(db: Session, request: DeviceCreateRequest):
+    def create_device(db: Session, request: DeviceCreateRequest) -> Device:
         if DeviceRepository.get_device_by_serial(db, request.serial_number):
             raise DeviceAlreadyExists("serial_number already exists")
 
@@ -52,18 +51,18 @@ class DeviceService:
         return DeviceRepository.create_device(db, device)
 
     @staticmethod
-    def get_device(db: Session, device_id: int):
+    def get_device(db: Session, device_id: int) -> Device:
         device = DeviceRepository.get_device_by_id(db, device_id)
         if not device:
             raise DeviceNotFound()
         return device
 
     @staticmethod
-    def list_devices(db: Session):
+    def list_devices(db: Session) -> List[Device]:
         return DeviceRepository.list_devices(db)
 
     @staticmethod
-    def update_device(db: Session, device_id: int, request: DeviceUpdateRequest):
+    def update_device(db: Session, device_id: int, request: DeviceUpdateRequest) -> Device:
         device = DeviceRepository.get_device_by_id(db, device_id)
         if not device:
             raise DeviceNotFound()
@@ -90,7 +89,7 @@ class DeviceService:
         return DeviceRepository.update_device(db, device)
 
     @staticmethod
-    def delete_device(db: Session, device_id: int):
+    def delete_device(db: Session, device_id: int) -> None:
         device = DeviceRepository.get_device_by_id(db, device_id)
         if not device:
             raise DeviceNotFound()
@@ -98,7 +97,8 @@ class DeviceService:
         DeviceRepository.delete_device(db, device)
 
     @staticmethod
-    def register(db: Session, request: DeviceRegister):
+    def register(db: Session, request: DeviceRegister) -> Device:
+        now = datetime.now(timezone.utc)
         device = DeviceRepository.get_device_by_serial(
             db,
             request.serial_number,
@@ -111,8 +111,12 @@ class DeviceService:
             device.device_model = request.device_model
             device.agent_version = request.agent_version
             device.ip_address = request.ip_address
-            device.last_seen = datetime.now(timezone.utc)
+            device.last_seen = now
             device.is_online = True
+            device.is_registered = True
+            device.status = "registered"
+            if not device.registration_date:
+                device.registration_date = now
 
             return DeviceRepository.update_device(db, device)
 
@@ -126,13 +130,18 @@ class DeviceService:
             agent_version=request.agent_version,
             ip_address=request.ip_address,
             is_online=True,
-            last_seen=datetime.now(timezone.utc),
+            last_seen=now,
+            is_registered=True,
+            status="registered",
+            registration_date=now,
+            created_at=now,
+            updated_at=now,
         )
 
         return DeviceRepository.create_device(db, device)
 
     @staticmethod
-    def heartbeat(db: Session, request: HeartbeatRequest):
+    def heartbeat(db: Session, request: HeartbeatRequest) -> Device:
         device = DeviceRepository.get_device_by_serial(
             db,
             request.serial_number,

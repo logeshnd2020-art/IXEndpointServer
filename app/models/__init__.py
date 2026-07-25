@@ -1,5 +1,6 @@
 from app.models.device import Device
 from app.models.device_heartbeat import DeviceHeartbeat
+from app.models.device_telemetry import DeviceTelemetry
 from app.models.enrollment_key import EnrollmentKey
 from app.models.session import Session
 from app.models.application import Application
@@ -8,5 +9,4 @@ from app.models.activity import ActivityEvent
 from app.models.role import Role
 from app.models.permission import Permission
 from app.models.role_permission import RolePermission
-from app.models.user import User
 from app.models.user import User

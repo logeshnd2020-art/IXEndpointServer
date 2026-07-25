@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.exceptions.device import DeviceNotFound
+from app.exceptions.device import DeviceNotFound, SessionNotFound
 from app.models.session import Session as UserSession
 from app.repositories.device_repository import DeviceRepository
 from app.repositories.session_repository import SessionRepository
@@ -11,7 +11,7 @@ from app.repositories.session_repository import SessionRepository
 class SessionService:
 
     @staticmethod
-    def login(db: Session, serial_number: str, username: str):
+    def login(db: Session, serial_number: str, username: str) -> UserSession:
 
         device = DeviceRepository.get_by_serial(db, serial_number)
 
@@ -33,7 +33,7 @@ class SessionService:
         return SessionRepository.create(db, session)
 
     @staticmethod
-    def logout(db: Session, serial_number: str):
+    def logout(db: Session, serial_number: str) -> UserSession:
 
         device = DeviceRepository.get_by_serial(db, serial_number)
 
@@ -43,7 +43,7 @@ class SessionService:
         session = SessionRepository.get_active(db, device.id)
 
         if not session:
-            return None
+            raise SessionNotFound()
 
         session.logout_time = datetime.now(timezone.utc)
         session.status = "LOGOUT"

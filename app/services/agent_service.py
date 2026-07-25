@@ -1,5 +1,6 @@
 import secrets
 from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_value
@@ -14,6 +15,33 @@ from app.schemas.heartbeat import AgentHeartbeatRequest, AgentHeartbeatResponse
 
 class AgentService:
     HEARTBEAT_INTERVAL = 300
+
+    @staticmethod
+    def _apply_registration_fields(
+        device: Device,
+        request: AgentRegisterRequest,
+        now: datetime,
+    ) -> None:
+        """Apply common registration fields to a device (shared by update and create paths)."""
+        device.device_uuid = request.device_uuid
+        device.hostname = request.hostname
+        device.serial_number = request.serial_number
+        device.username = request.device_uuid
+        device.manufacturer = request.manufacturer
+        device.model = request.model
+        device.platform = request.platform
+        device.os_name = request.os_name
+        device.os_version = request.os_version
+        device.processor = request.processor
+        device.memory_gb = request.memory_gb
+        device.storage_gb = request.storage_gb
+        device.agent_version = request.agent_version
+        device.status = "registered"
+        if not device.registration_date:
+            device.registration_date = now
+        device.is_registered = True
+        device.updated_at = now
+        device.last_seen = now
 
     @staticmethod
     def register_agent(db: Session, request: AgentRegisterRequest) -> AgentRegisterResponse:
@@ -31,6 +59,7 @@ class AgentService:
 
         device = existing_by_uuid or existing_by_serial
         new_registration = False
+        is_new = device is None
 
         if device:
             if device.device_uuid and device.device_uuid != request.device_uuid:
@@ -41,60 +70,27 @@ class AgentService:
             if not device.is_registered:
                 new_registration = True
 
-            device.device_uuid = request.device_uuid
-            device.hostname = request.hostname
-            device.serial_number = request.serial_number
-            device.username = request.device_uuid
-            device.manufacturer = request.manufacturer
-            device.model = request.model
-            device.platform = request.platform
-            device.os_name = request.os_name
-            device.os_version = request.os_version
-            device.processor = request.processor
-            device.memory_gb = request.memory_gb
-            device.storage_gb = request.storage_gb
-            device.agent_version = request.agent_version
-            device.status = "registered"
-            if not device.registration_date:
-                device.registration_date = now
-            device.is_registered = True
-            device.updated_at = now
-            device.last_seen = now
-            device = DeviceRepository.update_device(db, device)
+            AgentService._apply_registration_fields(device, request, now)
         else:
             new_registration = True
-            device = Device(
-                device_uuid=request.device_uuid,
-                hostname=request.hostname,
-                serial_number=request.serial_number,
-                username=request.device_uuid,
-                manufacturer=request.manufacturer,
-                model=request.model,
-                platform=request.platform,
-                os_name=request.os_name,
-                os_version=request.os_version,
-                processor=request.processor,
-                memory_gb=request.memory_gb,
-                storage_gb=request.storage_gb,
-                agent_version=request.agent_version,
-                status="registered",
-                registration_date=now,
-                is_registered=True,
-                is_online=True,
-                created_at=now,
-                updated_at=now,
-                last_seen=now,
-            )
-            device = DeviceRepository.create_device(db, device)
+            device = Device()
+            AgentService._apply_registration_fields(device, request, now)
+            device.is_online = True
+            device.created_at = now
 
-        if new_registration:
-            EnrollmentKeyService.increment_registered_count(db, enrollment_key)
-
+        # Generate token before persisting to avoid a redundant second update_device call
         raw_token = secrets.token_urlsafe(32)
         device.device_token_hash = hash_value(raw_token)
         device.token_created_at = now
         device.token_last_used = now
-        device = DeviceRepository.update_device(db, device)
+
+        if is_new:
+            device = DeviceRepository.create_device(db, device)
+        else:
+            device = DeviceRepository.update_device(db, device)
+
+        if new_registration:
+            EnrollmentKeyService.increment_registered_count(db, enrollment_key)
 
         return AgentRegisterResponse(
             device_id=device.id,
@@ -103,7 +99,7 @@ class AgentService:
         )
 
     @staticmethod
-    def heartbeat(db: Session, request: AgentHeartbeatRequest, device) -> AgentHeartbeatResponse:
+    def heartbeat(db: Session, request: AgentHeartbeatRequest, device: Device) -> AgentHeartbeatResponse:
         device.last_seen = datetime.now(timezone.utc)
         device.token_last_used = datetime.now(timezone.utc)
         device.agent_version = request.agent_version
