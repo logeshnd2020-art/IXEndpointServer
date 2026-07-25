@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
 import os
 import uuid
 from typing import Any, Dict, Optional, Union
@@ -20,6 +22,15 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def hash_value(value: str) -> str:
+    secret = SECRET_KEY.encode("utf-8")
+    return hmac.new(secret, value.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def verify_value(value: str, hashed_value: str) -> bool:
+    return hmac.compare_digest(hash_value(value), hashed_value)
 
 
 # JWT settings
