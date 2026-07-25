@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_device
@@ -50,14 +50,9 @@ def register_agent(
         422: {"description": "Validation error"},
     },
 )
-async def heartbeat(
-    request: Request,
+def heartbeat(
     heartbeat: AgentHeartbeatRequest,
     current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
-    body = await request.body()
-    print('=== AGENT HEARTBEAT RECEIVED ===')
-    print('headers:', dict(request.headers))
-    print('raw body:', body.decode('utf-8', errors='replace'))
     return AgentService.heartbeat(db, heartbeat, current_device)

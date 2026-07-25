@@ -4,3 +4,7 @@ class DeviceNotFound(Exception):
 
 class DeviceAlreadyExists(Exception):
     pass
+
+
+class SessionNotFound(Exception):
+    pass

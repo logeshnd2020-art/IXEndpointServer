@@ -37,11 +37,6 @@ class DeviceRepository:
         )
 
     @staticmethod
-    def get_device_by_serial_number(db: Session, serial_number: str) -> Optional[Device]:
-        """Alias for get_device_by_serial."""
-        return DeviceRepository.get_device_by_serial(db, serial_number)
-
-    @staticmethod
     def get_device_by_token_hash(db: Session, token_hash: str) -> Optional[Device]:
         return (
             db.query(Device)

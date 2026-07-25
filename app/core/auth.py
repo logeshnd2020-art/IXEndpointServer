@@ -28,14 +28,23 @@ def get_current_user(
         )
 
     user_id = payload.get("sub")
-    if user_id is None:
+    if payload.get("type") != "access" or user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -50,14 +59,7 @@ def get_current_device(
     authorization: str = Header(..., alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> Device:
-    print('==========================')
-    print('HEARTBEAT AUTH DEBUG')
-    print('==========================')
-    print('Raw Authorization header:', authorization)
-
     if not authorization or not authorization.startswith("Device "):
-        print('failure: invalid scheme')
-        print('CONCLUSION: Token hash mismatch')
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication scheme",
@@ -65,43 +67,18 @@ def get_current_device(
         )
 
     token = authorization[len("Device ") :].strip()
-    print('Extracted token:', token)
-
     token_hash = hash_value(token)
-    print('SHA256 hash generated from token:', token_hash)
-
-    query = db.query(Device).filter(Device.device_token_hash == token_hash)
-    try:
-        compiled_query = str(query.statement.compile(dialect=db.bind.dialect, compile_kwargs={"literal_binds": True}))
-    except Exception:
-        compiled_query = str(query)
-    print('SQLAlchemy query being executed:', compiled_query)
 
     device = DeviceRepository.get_device_by_token_hash(db, token_hash)
-    print('DeviceRepository.get_device_by_token_hash() result:', device)
 
     if device is None:
-        total_devices = db.query(Device).count()
-        hashes = [row[0] for row in db.query(Device.device_token_hash).limit(10).all()]
-        print('Count of devices in database:', total_devices)
-        print('First 10 chars of every device_token_hash (limited to 10 rows):')
-        for token_hash_value in hashes:
-            print('  ', (token_hash_value or '')[:10])
-        print('First 10 chars of computed token_hash:', token_hash[:10])
-        print('CONCLUSION: Token hash mismatch')
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate device credentials",
             headers={"WWW-Authenticate": "Device"},
         )
 
-    print('Returned device id:', device.id)
-    print('Returned device hostname:', device.hostname)
-    print('Returned device is_registered:', device.is_registered)
-    print('Returned device status:', device.status)
-
     if not device.is_registered:
-        print('CONCLUSION: Registration stored wrong hash')
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate device credentials",
@@ -112,7 +89,6 @@ def get_current_device(
     db.commit()
     db.refresh(device)
 
-    print('CONCLUSION: Authentication successful')
     return device
 
 

@@ -31,6 +31,9 @@ class AuthService:
         if not user:
             return None
 
+        if not user.is_active:
+            return None
+
         if not security.verify_password(password, user.password_hash):
             return None
 
