@@ -18,6 +18,21 @@ class IdleRepository:
         return IdleRepository._commit_and_refresh(db, idle)
 
     @staticmethod
+    def get_by_local_idle_id(
+        db: Session,
+        device_id: int,
+        local_idle_id: int,
+    ) -> Optional[IdleEvent]:
+        return (
+            db.query(IdleEvent)
+            .filter(
+                IdleEvent.device_id == device_id,
+                IdleEvent.local_idle_id == local_idle_id,
+            )
+            .first()
+        )
+
+    @staticmethod
     def get_active(db: Session, session_id: int) -> Optional[IdleEvent]:
         return (
             db.query(IdleEvent)
