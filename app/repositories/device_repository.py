@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.device import Device
@@ -51,17 +52,29 @@ class DeviceRepository:
     @staticmethod
     def create_device(db: Session, device: Device) -> Device:
         db.add(device)
-        db.commit()
-        db.refresh(device)
+        try:
+            db.commit()
+            db.refresh(device)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
         return device
 
     @staticmethod
     def update_device(db: Session, device: Device) -> Device:
-        db.commit()
-        db.refresh(device)
+        try:
+            db.commit()
+            db.refresh(device)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
         return device
 
     @staticmethod
     def delete_device(db: Session, device: Device) -> None:
         db.delete(device)
-        db.commit()
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise

@@ -105,3 +105,20 @@ class HeartbeatRequest(BaseModel):
 class HeartbeatResponse(BaseModel):
     status: str
     last_seen: str
+class DeviceInventoryRequest(BaseModel):
+    hostname: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    platform: Optional[str] = None
+    os_name: Optional[str] = None
+    os_version: Optional[str] = None
+    processor: Optional[str] = None
+    memory_gb: Optional[float] = None
+    storage_gb: Optional[float] = None
+    agent_version: Optional[str] = None
+    ip_address: Optional[str] = None
+
+
+class DeviceInventoryResponse(BaseModel):
+    status: str
+    device_id: int
