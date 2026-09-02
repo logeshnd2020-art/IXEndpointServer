@@ -53,6 +53,7 @@ class AgentSessionService:
                 login_time=request.login_time,
                 logout_time=request.logout_time,
                 status=session_status,
+                duration_seconds=request.duration_seconds,
             )
 
             session = SessionRepository.create(
@@ -72,6 +73,12 @@ class AgentSessionService:
             existing.login_time = request.login_time
             existing.logout_time = request.logout_time
             existing.status = session_status
+
+            # A NULL duration_seconds means the agent didn't report one on
+            # this sync, not that the duration is zero. Never overwrite a
+            # previously stored value with NULL.
+            if request.duration_seconds is not None:
+                existing.duration_seconds = request.duration_seconds
 
             session = SessionRepository.update(
                 db,

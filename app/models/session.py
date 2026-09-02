@@ -58,6 +58,15 @@ class Session(Base):
         default="ACTIVE",
     )
 
+    # Monitored-awake duration reported by the agent: wall time minus
+    # confirmed sleep minus unknown gaps. Nullable because older agent
+    # payloads (and sessions synced before this field existed) omit it;
+    # NULL means "unknown", not "zero".
+    duration_seconds = Column(
+        Integer,
+        nullable=True,
+    )
+
     device = relationship("Device")
 
     __table_args__ = (
