@@ -10,8 +10,11 @@ from app.services.productivity_report_service import ProductivityReportService
 def _make_cross_day_session(db_session, device, duration_seconds=None):
     # Naive datetimes are treated as Asia/Kolkata local time by the
     # service, matching how the endpoint-local agent timestamps are
-    # stored. 8h wall clock split 4h/4h across the midnight boundary.
-    # Day 1's UTC overlap window works out to 14:30-18:30 UTC.
+    # stored (session/idle timestamps, and -- since the heartbeat
+    # timezone-interpretation fix -- device_heartbeats.timestamp too;
+    # see MonitoringWindowService.CLIENT_LOCAL_TZ). 8h wall clock split
+    # 4h/4h across the midnight boundary. Day 1's UTC overlap window
+    # works out to 14:30-18:30 UTC.
     session = Session(
         device_id=device.id,
         local_session_id=1,
@@ -68,10 +71,12 @@ def test_duration_seconds_is_ignored_for_report_even_when_present(db_session, de
     # with real heartbeat evidence by a wide margin. Heartbeats show only
     # the first hour of day 1's 4h (14400s) overlap as monitored; a
     # duration_seconds claiming otherwise must have zero effect.
+    # 20:00/21:00 IST == 14:30/15:30 UTC -- the first hour of day 1's
+    # 14:30-18:30 UTC overlap window.
     session = _make_cross_day_session(db_session, device, duration_seconds=4000)
 
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 21, 0, 0)))
     db_session.commit()
 
     by_day = _reports_by_day(db_session)
@@ -87,11 +92,11 @@ def test_report_idle_seconds_cannot_exceed_monitored_time_for_period(
     db_session, device
 ):
     # Heartbeats only cover the first hour of day 1's 4h overlap window
-    # -- the rest is an unmonitored gap.
+    # -- the rest is an unmonitored gap. 20:00/21:00 IST == 14:30/15:30 UTC.
     session = _make_cross_day_session(db_session, device, duration_seconds=None)
 
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 21, 0, 0)))
     db_session.commit()
 
     # Idle spans the entire first day's overlap window, well beyond the
@@ -116,10 +121,11 @@ def test_report_idle_seconds_cannot_exceed_monitored_time_for_period(
 def test_sleep_seconds_is_wall_clock_minus_working_when_gap_detected(db_session, device):
     # 4h (14400s) day-1 overlap window, but heartbeats only cover the
     # first hour -- the rest must show up as sleep, not silently as 0.
+    # 20:00/21:00 IST == 14:30/15:30 UTC.
     _make_cross_day_session(db_session, device, duration_seconds=None)
 
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 21, 0, 0)))
     db_session.commit()
 
     by_day = _reports_by_day(db_session)
@@ -133,19 +139,20 @@ def test_sleep_seconds_from_heartbeat_gap_when_duration_unknown(db_session, devi
     # No agent-reported duration_seconds -- Sleep must still be derivable
     # from the device's own heartbeat gaps, not silently read as 0.
     #
-    # Session login/logout are naive datetimes treated as IST local time
-    # (matching the agent's session-sync convention), but device_heartbeat
-    # timestamps are treated as naive UTC (matching the agent's heartbeat
-    # convention) -- these two must not be confused. login_time
-    # 2026-09-01 20:00 IST == 2026-09-01 14:30 UTC, so day 1's overlap
-    # window in UTC is 14:30-18:30.
+    # Session login/logout AND device_heartbeat timestamps are both naive
+    # datetimes treated as IST local time (matching the agent's
+    # session-sync and heartbeat-write conventions respectively -- see
+    # MonitoringWindowService.CLIENT_LOCAL_TZ). login_time 2026-09-01
+    # 20:00 IST == 2026-09-01 14:30 UTC, so day 1's overlap window in UTC
+    # is 14:30-18:30, and a heartbeat at 2026-09-01 20:00 IST lands at
+    # that same 14:30 UTC instant.
     session = _make_cross_day_session(db_session, device, duration_seconds=None)
 
     # Heartbeats only during the first hour of day 1's 4h UTC overlap
-    # (14:30-15:30), then nothing for the rest of that window -- a large
-    # gap inside day 1's window.
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    # (14:30-15:30 UTC == 20:00-21:00 IST), then nothing for the rest of
+    # that window -- a large gap inside day 1's window.
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 21, 0, 0)))
     db_session.commit()
 
     by_day = _reports_by_day(db_session)
@@ -164,8 +171,8 @@ def test_report_application_elapsed_excludes_unmonitored_gap_time(
 ):
     session = _make_cross_day_session(db_session, device, duration_seconds=None)
 
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 21, 0, 0)))
     db_session.commit()
 
     # Application runs the entire first-day overlap, well beyond the ~1h

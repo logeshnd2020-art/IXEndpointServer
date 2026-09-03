@@ -1,9 +1,20 @@
 from datetime import datetime, timezone
 from typing import List, Tuple
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session as DBSession
 
 from app.models.device_heartbeat import DeviceHeartbeat
+
+
+# device_heartbeats.timestamp is written by
+# DeviceHeartbeatRepository.create_heartbeat() as a naive `datetime.now()`
+# on the server process -- i.e. naive LOCAL (Asia/Kolkata) wall-clock time,
+# the same convention already used for sessions/idle_events (see
+# TimelineService.CLIENT_LOCAL_TZ), NOT naive UTC. A naive heartbeat
+# timestamp must be interpreted accordingly before being compared against
+# window bounds, which always arrive already timezone-aware UTC.
+CLIENT_LOCAL_TZ = ZoneInfo("Asia/Kolkata")
 
 
 # A segment is (start: datetime, end: datetime, monitored: bool).
@@ -51,6 +62,20 @@ class MonitoringWindowService:
         return dt.astimezone(timezone.utc)
 
     @staticmethod
+    def _normalize_heartbeat_timestamp(dt: datetime) -> datetime:
+        """
+        Like `_normalize`, but for `device_heartbeats.timestamp` values
+        specifically: a naive value here is endpoint-local (Asia/Kolkata)
+        wall-clock time, not UTC (see CLIENT_LOCAL_TZ above), so it must
+        be tagged with the local zone -- not UTC -- before conversion.
+        An already timezone-aware value (e.g. once heartbeats start being
+        written with tzinfo) is trusted as-is, same as `_normalize`.
+        """
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=CLIENT_LOCAL_TZ).astimezone(timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    @staticmethod
     def get_segments(
         db: DBSession,
         device_id: int,
@@ -70,18 +95,34 @@ class MonitoringWindowService:
         if window_end <= window_start:
             return []
 
+        # device_heartbeats.timestamp is stored naive-local (see
+        # CLIENT_LOCAL_TZ above); SQLite has no real timezone-aware
+        # column type, so this comparison happens on the naive wall-clock
+        # value either way. Querying with window_start/window_end as-is
+        # (true UTC instants) would compare a UTC clock reading against
+        # rows holding local-clock readings -- off by the IST offset at
+        # exactly the window's edges, which would wrongly admit/exclude
+        # heartbeats there. Translate the bounds to their own naive local
+        # equivalents first so the comparison lines up with what's
+        # actually stored.
+        query_start = window_start.astimezone(CLIENT_LOCAL_TZ).replace(tzinfo=None)
+        query_end = window_end.astimezone(CLIENT_LOCAL_TZ).replace(tzinfo=None)
+
         heartbeats = (
             db.query(DeviceHeartbeat.timestamp)
             .filter(
                 DeviceHeartbeat.device_id == device_id,
-                DeviceHeartbeat.timestamp >= window_start,
-                DeviceHeartbeat.timestamp <= window_end,
+                DeviceHeartbeat.timestamp >= query_start,
+                DeviceHeartbeat.timestamp <= query_end,
             )
             .order_by(DeviceHeartbeat.timestamp.asc())
             .all()
         )
 
-        timestamps = [MonitoringWindowService._normalize(row[0]) for row in heartbeats]
+        timestamps = [
+            MonitoringWindowService._normalize_heartbeat_timestamp(row[0])
+            for row in heartbeats
+        ]
 
         if not timestamps:
             # No heartbeat evidence at all inside this window -- assume
