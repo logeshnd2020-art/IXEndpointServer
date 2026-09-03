@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.models.device import Device
 from app.models.session import Session
 from app.models.application import Application
-from app.models.idle import IdleEvent
+from app.services.timeline_service import TimelineService
 
 
 LOCAL_TZ = ZoneInfo("Asia/Kolkata")
@@ -25,79 +25,6 @@ class ProductivityReportService:
             ).astimezone(timezone.utc)
 
         return dt.astimezone(timezone.utc)
-
-    @staticmethod
-    def overlap(start1, end1, start2, end2):
-
-        if not start1 or not end1 or not start2 or not end2:
-            return 0
-
-        start = max(start1, start2)
-        end = min(end1, end2)
-
-        if end <= start:
-            return 0
-
-        return int(
-            (end - start).total_seconds()
-        )
-
-    @staticmethod
-    def _effective_working_seconds(
-        session,
-        session_start,
-        session_end,
-        overlap_start,
-        overlap_end,
-    ):
-        """
-        Working seconds for the slice of a session that falls inside one
-        reporting period (day/week/month bucket).
-
-        The agent only reports one monitored-awake duration_seconds for
-        the whole session, not a per-day breakdown, so a session that
-        spans multiple days can't be split exactly. This applies a
-        proportional awake-time approximation: the session's total
-        monitored-awake duration is allocated across the days it touches
-        in proportion to each day's share of the session's total
-        wall-clock time, then clamped to that day's own wall-clock
-        overlap so the approximation can never inflate a single day's
-        working time beyond what the timestamps allow.
-
-        Falls back to raw wall-clock overlap when duration_seconds is
-        unknown (older/unsynced sessions).
-        """
-
-        wall_overlap_seconds = int(
-            (overlap_end - overlap_start).total_seconds()
-        )
-
-        duration_seconds = session.duration_seconds
-
-        if duration_seconds is None:
-            return wall_overlap_seconds
-
-        total_session_wall_seconds = int(
-            (session_end - session_start).total_seconds()
-        )
-
-        if total_session_wall_seconds <= 0:
-            return wall_overlap_seconds
-
-        # Protect against a bad/stale duration value before prorating it.
-        clamped_duration = max(
-            0,
-            min(duration_seconds, total_session_wall_seconds),
-        )
-
-        share = clamped_duration * (
-            wall_overlap_seconds / total_session_wall_seconds
-        )
-
-        return max(
-            0,
-            min(int(round(share)), wall_overlap_seconds),
-        )
 
     @staticmethod
     def build_periods(
@@ -301,6 +228,7 @@ class ProductivityReportService:
                         user_totals[username] = {
                             "working_seconds": 0,
                             "idle_seconds": 0,
+                            "sleep_seconds": 0,
                             "applications": {},
                         }
 
@@ -311,69 +239,34 @@ class ProductivityReportService:
                     # ------------------------------------------------
                     # Working time for this reporting period
                     #
-                    # A session can span midnight / multiple days.
-                    # For a daily report, count only the portion of
-                    # the session that falls inside this day.
-                    #
-                    # Idle periods are removed below, so:
-                    #
-                    # working = tracked session time
-                    # active  = working - idle
+                    # A session can span midnight / multiple days. For a
+                    # daily report, count only the portion of the session
+                    # that falls inside this day -- via the same canonical
+                    # interval representation used everywhere else
+                    # (TimelineService.build(), scoped to this period's
+                    # overlap window). Deliberately does not use
+                    # session.duration_seconds; see TimelineService's
+                    # docstring for why.
                     # ------------------------------------------------
-                    working_seconds = (
-                        ProductivityReportService._effective_working_seconds(
-                            session,
-                            session_start,
-                            session_end,
-                            overlap_start,
-                            overlap_end,
-                        )
+                    segments = TimelineService.build(
+                        db,
+                        session,
+                        overlap_start,
+                        overlap_end,
                     )
+
+                    segment_totals = TimelineService.totals_by_type(segments)
+
+                    session_idle = segment_totals.get("IDLE", 0)
+                    working_seconds = segment_totals.get("ACTIVE", 0) + session_idle
 
                     aggregate[
                         "working_seconds"
                     ] += working_seconds
 
-                    idle_events = (
-                        db.query(IdleEvent)
-                        .filter(
-                            IdleEvent.session_id
-                            == session.id
-                        )
-                        .all()
-                    )
-
-                    session_idle = 0
-
-                    for idle in idle_events:
-
-                        idle_start = (
-                            ProductivityReportService.normalize(
-                                idle.idle_start
-                            )
-                        )
-
-                        idle_end = (
-                            ProductivityReportService.normalize(
-                                idle.idle_end
-                            )
-                            if idle.idle_end
-                            else now_utc
-                        )
-
-                        session_idle += (
-                            ProductivityReportService.overlap(
-                                overlap_start,
-                                overlap_end,
-                                idle_start,
-                                idle_end,
-                            )
-                        )
-
-                    session_idle = min(
-                        session_idle,
-                        working_seconds,
-                    )
+                    aggregate[
+                        "sleep_seconds"
+                    ] += segment_totals.get("SLEEP_GAP", 0)
 
                     aggregate[
                         "idle_seconds"
@@ -422,57 +315,24 @@ class ProductivityReportService:
                         if app_end <= app_start:
                             continue
 
-                        elapsed = int(
-                            (
-                                app_end
-                                - app_start
-                            ).total_seconds()
+                        # Scope this application's usage span to the same
+                        # canonical ACTIVE/IDLE/SLEEP_GAP segments the
+                        # session totals above use, so app-level numbers
+                        # can never disagree with the session/day totals
+                        # they're supposed to sum up to. SLEEP_GAP overlap
+                        # is simply excluded from elapsed entirely, the
+                        # same way session-level working_seconds excludes
+                        # it -- an app can't have been "active" or "idle"
+                        # during a stretch the device wasn't observed.
+                        app_by_type = TimelineService.overlap_seconds_by_type(
+                            segments,
+                            app_start,
+                            app_end,
                         )
 
-                        # An application cannot have been active longer
-                        # than the session's own monitored-awake duration
-                        # for this period.
-                        elapsed = min(
-                            elapsed,
-                            working_seconds,
-                        )
-
-                        app_idle = 0
-
-                        for idle in idle_events:
-
-                            idle_start = (
-                                ProductivityReportService.normalize(
-                                    idle.idle_start
-                                )
-                            )
-
-                            idle_end = (
-                                ProductivityReportService.normalize(
-                                    idle.idle_end
-                                )
-                                if idle.idle_end
-                                else now_utc
-                            )
-
-                            app_idle += (
-                                ProductivityReportService.overlap(
-                                    app_start,
-                                    app_end,
-                                    idle_start,
-                                    idle_end,
-                                )
-                            )
-
-                        app_idle = min(
-                            app_idle,
-                            elapsed,
-                        )
-
-                        app_active = max(
-                            elapsed - app_idle,
-                            0,
-                        )
+                        app_active = app_by_type.get("ACTIVE", 0)
+                        app_idle = app_by_type.get("IDLE", 0)
+                        elapsed = app_active + app_idle
 
                         name = (
                             app.application_name
@@ -575,6 +435,9 @@ class ProductivityReportService:
 
                             "active_seconds":
                                 active,
+
+                            "sleep_seconds":
+                                aggregate["sleep_seconds"],
 
                             "productivity_percent":
                                 productivity,

@@ -102,3 +102,21 @@ def require_roles(*allowed_roles: str) -> Callable:
         return current_user
 
     return role_checker
+
+
+# Roles allowed to view the read-only monitoring dashboard (device list,
+# device detail, productivity, application usage, etc). MONITOR is
+# deliberately included here only -- it is never added to any
+# create/update/delete allowlist (see app/api/device.py,
+# app/api/enrollment_key.py), so it stays read-only by simple omission.
+DASHBOARD_READ_ROLES = (
+    "SuperAdmin",
+    "Admin",
+    "ITSupport",
+    "Manager",
+    "Auditor",
+    "MONITOR",
+)
+
+
+require_dashboard_read = require_roles(*DASHBOARD_READ_ROLES)

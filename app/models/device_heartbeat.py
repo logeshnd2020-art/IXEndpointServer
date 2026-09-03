@@ -17,6 +17,10 @@ class DeviceHeartbeat(Base):
     logged_in_user = Column(String(100), nullable=True)
     ip_address = Column(String(50), nullable=False)
     network_name = Column(String(100), nullable=True)
+    # Primary physical network interface's hardware MAC address
+    # ("XX:XX:XX:XX:XX:XX"), reported by the agent -- never computed or
+    # inferred server-side. NULL until the agent reports one.
+    mac_address = Column(String(17), nullable=True)
     uptime_seconds = Column(Integer, nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 

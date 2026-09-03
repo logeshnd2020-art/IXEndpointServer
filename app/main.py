@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.health import router as health_router
 from app.api.device import router as device_router
@@ -12,6 +14,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.auth import router as auth_router
 from app.api.roles import router as roles_router
 from app.api.enrollment_key import router as enrollment_key_router
+from app.api.device_page import router as device_page_router
 
 import app.models
 
@@ -35,11 +38,21 @@ app.include_router(dashboard_router)
 app.include_router(auth_router)
 app.include_router(roles_router)
 app.include_router(enrollment_key_router)
+app.include_router(device_page_router)
+
+# Serve local static assets (CSS/JS) -- no external CDN dependency for
+# anything besides Bootstrap, which was already the existing convention.
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.get("/")
 def root():
-    return {
-        "product": "IX Endpoint Services",
-        "status": "Running",
-        "version": "1.0.0",
-    }
+    # Static shell -- unauthenticated by design. All real data is fetched
+    # client-side from role-checked, bearer-token-protected JSON APIs; the
+    # page itself redirects to /login if no valid token is present.
+    return FileResponse("templates/index.html")
+
+
+@app.get("/login")
+def login_page():
+    return FileResponse("templates/login.html")

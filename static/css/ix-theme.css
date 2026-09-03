@@ -1,0 +1,296 @@
+/*
+ * IX Endpoint Services -- dark theme tokens + base styles.
+ * Palette calibrated from the real Intellectyx logo/brand reference
+ * (deep black-green base, lime-green accent, subtle grid + glow).
+ * Loaded on every page alongside Bootstrap 5.3.3 (data-bs-theme="dark").
+ */
+
+:root {
+    /* Brand */
+    --ix-accent: #8dc63f;
+    --ix-accent-dark: #6fa52e;
+    --ix-accent-tint: rgba(141, 198, 63, 0.14);
+    --ix-accent-glow: rgba(141, 198, 63, 0.25);
+
+    /* Surfaces */
+    --ix-bg: #070c07;
+    --ix-bg-alt: #0a120a;
+    --ix-surface: #0e150e;
+    --ix-surface-raised: #121b12;
+    --ix-border: rgba(141, 198, 63, 0.16);
+    --ix-border-strong: rgba(141, 198, 63, 0.3);
+
+    /* Text */
+    --ix-text: #eaf3e3;
+    --ix-text-muted: #8fa084;
+    --ix-text-faint: #5f6f57;
+
+    /* Status */
+    --ix-online: #8dc63f;
+    --ix-offline: #6b7a66;
+    --ix-idle: #e8a33d;
+    --ix-sleep: #5b84a8;
+    --ix-danger: #e5484d;
+
+    --ix-radius: 12px;
+    --ix-radius-sm: 8px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+}
+
+body {
+    background-color: var(--ix-bg);
+    color: var(--ix-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    /* Subtle grid + soft center glow, recreated in CSS rather than using
+       the reference PNG directly. */
+    background-image:
+        radial-gradient(ellipse 900px 600px at 50% 15%, var(--ix-accent-tint), transparent 60%),
+        linear-gradient(rgba(141, 198, 63, 0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(141, 198, 63, 0.055) 1px, transparent 1px),
+        linear-gradient(180deg, var(--ix-bg-alt), var(--ix-bg) 40%);
+    background-size: auto, 42px 42px, 42px 42px, 100% 100%;
+    background-attachment: fixed;
+}
+
+a { color: var(--ix-accent); }
+a:hover { color: var(--ix-accent-dark); }
+
+::selection { background: var(--ix-accent-tint); }
+
+/* ---------- Wordmark ---------- */
+
+.ix-wordmark {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    line-height: 1.1;
+}
+
+/* Official Intellectyx logo asset (static/img/ix-logo.png), used exactly
+   as provided -- not recolored/redrawn. The file has its own baked-in
+   dark-green background (no alpha channel); a small border-radius just
+   softens the rectangle's edges without altering the image itself. */
+.ix-wordmark img {
+    display: block;
+    width: 100%;
+    max-width: 180px;
+    height: auto;
+    border-radius: 8px;
+}
+
+.ix-wordmark .ix-wordmark-brand {
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--ix-accent);
+    letter-spacing: 0.01em;
+    text-transform: lowercase;
+}
+
+.ix-wordmark .ix-wordmark-sub {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--ix-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* ---------- Buttons ---------- */
+
+.ix-btn-primary {
+    background: var(--ix-accent);
+    border-color: var(--ix-accent);
+    color: #0a1206;
+    font-weight: 600;
+}
+
+.ix-btn-primary:hover,
+.ix-btn-primary:focus {
+    background: var(--ix-accent-dark);
+    border-color: var(--ix-accent-dark);
+    color: #0a1206;
+}
+
+.ix-btn-outline {
+    background: transparent;
+    border: 1px solid var(--ix-border-strong);
+    color: var(--ix-text);
+}
+
+.ix-btn-outline:hover {
+    border-color: var(--ix-accent);
+    color: var(--ix-accent);
+}
+
+/* ---------- Cards ---------- */
+
+.ix-card {
+    background: var(--ix-surface);
+    border: 1px solid var(--ix-border);
+    border-radius: var(--ix-radius);
+}
+
+.ix-kpi-card {
+    background: var(--ix-surface);
+    border: 1px solid var(--ix-border);
+    border-radius: var(--ix-radius);
+    padding: 1.1rem 1.25rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.ix-kpi-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ix-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.ix-kpi-value {
+    font-size: 1.7rem;
+    font-weight: 700;
+    margin-top: 0.2rem;
+    color: var(--ix-text);
+}
+
+.ix-kpi-value.ix-accent { color: var(--ix-accent); }
+.ix-kpi-note {
+    font-size: 0.74rem;
+    color: var(--ix-text-faint);
+    margin-top: 0.15rem;
+}
+
+/* ---------- Status badges ---------- */
+
+.ix-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+}
+
+.ix-badge-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.ix-badge-online {
+    background: var(--ix-accent-tint);
+    color: var(--ix-accent);
+}
+.ix-badge-online .ix-badge-dot {
+    background: var(--ix-online);
+    box-shadow: 0 0 6px var(--ix-accent-glow);
+}
+
+.ix-badge-offline {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--ix-text-muted);
+}
+.ix-badge-offline .ix-badge-dot { background: var(--ix-offline); }
+
+/* ---------- Tabs ---------- */
+
+.ix-tabs {
+    border-bottom: 1px solid var(--ix-border);
+    display: flex;
+    gap: 0.25rem;
+}
+
+.ix-tab {
+    background: none;
+    border: none;
+    padding: 0.65rem 1.1rem;
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: var(--ix-text-muted);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+}
+
+.ix-tab.active {
+    color: var(--ix-accent);
+    border-bottom-color: var(--ix-accent);
+}
+
+.ix-tab-panel { display: none; }
+.ix-tab-panel.active { display: block; }
+
+/* ---------- Forms ---------- */
+
+.ix-form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ix-text-muted);
+}
+
+.form-control, .form-select {
+    background-color: var(--ix-surface-raised) !important;
+    border-color: var(--ix-border) !important;
+    color: var(--ix-text) !important;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--ix-accent) !important;
+    box-shadow: 0 0 0 0.2rem var(--ix-accent-tint) !important;
+}
+
+.form-control::placeholder { color: var(--ix-text-faint); }
+
+/* ---------- Login page ---------- */
+
+.ix-login-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ix-login-card {
+    background: var(--ix-surface);
+    border: 1px solid var(--ix-border);
+    border-radius: var(--ix-radius);
+    padding: 2.5rem 2.25rem;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 0 60px rgba(141, 198, 63, 0.06);
+}
+
+.ix-login-card .ix-wordmark {
+    align-items: center;
+    text-align: center;
+    margin-bottom: 1.75rem;
+}
+
+.ix-login-card .ix-wordmark img { max-width: 260px; }
+
+.ix-login-error {
+    font-size: 0.85rem;
+    color: var(--ix-danger);
+    background: rgba(229, 72, 77, 0.1);
+    border: 1px solid rgba(229, 72, 77, 0.35);
+    border-radius: var(--ix-radius-sm);
+    padding: 0.55rem 0.75rem;
+    margin-bottom: 1rem;
+    display: none;
+}
+
+.ix-login-error.show { display: block; }
+
+@media (max-width: 576px) {
+    .ix-login-card { padding: 2rem 1.5rem; }
+}

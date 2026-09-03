@@ -21,6 +21,7 @@ class DeviceHeartbeatRepository:
         ip_address: str,
         network_name: Optional[str],
         uptime_seconds: int,
+        mac_address: Optional[str] = None,
     ) -> DeviceHeartbeat:
         heartbeat = DeviceHeartbeat(
             device=device,
@@ -31,6 +32,7 @@ class DeviceHeartbeatRepository:
             logged_in_user=logged_in_user,
             ip_address=ip_address,
             network_name=network_name,
+            mac_address=mac_address,
             uptime_seconds=uptime_seconds,
             timestamp=datetime.now(),
         )

@@ -12,6 +12,7 @@ class AuthUser(BaseModel):
     username: str
     email: Optional[EmailStr]
     is_active: bool
+    role: Optional[str] = None
 
 
 class AuthResponse(BaseModel):
@@ -20,3 +21,13 @@ class AuthResponse(BaseModel):
     token_type: str
     expires_in: int
     user: AuthUser
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int

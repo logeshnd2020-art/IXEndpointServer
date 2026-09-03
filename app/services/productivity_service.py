@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.models.device import Device
 from app.models.session import Session
-from app.models.idle import IdleEvent
 from app.models.activity import ActivityEvent
 from app.models.application import Application
+from app.services.timeline_service import TimelineService
 
 
 CLIENT_LOCAL_TZ = ZoneInfo("Asia/Kolkata")
@@ -29,54 +29,6 @@ class ProductivityService:
             ).astimezone(timezone.utc)
 
         return dt.astimezone(timezone.utc)
-
-    @staticmethod
-    def _overlap_seconds(start1, end1, start2, end2):
-        """
-        Return the number of seconds where two time intervals overlap.
-        """
-        start1 = ProductivityService._normalize(start1)
-        end1 = ProductivityService._normalize(end1)
-        start2 = ProductivityService._normalize(start2)
-        end2 = ProductivityService._normalize(end2)
-
-        if not start1 or not start2:
-            return 0
-
-        if end1 is None:
-            end1 = datetime.now(timezone.utc)
-
-        if end2 is None:
-            end2 = datetime.now(timezone.utc)
-
-        start = max(start1, start2)
-        end = min(end1, end2)
-
-        if end <= start:
-            return 0
-
-        return int((end - start).total_seconds())
-
-    @staticmethod
-    def _effective_working_seconds(session, wall_clock_seconds):
-        """
-        Prefer the agent-reported monitored-awake duration (wall time
-        minus confirmed sleep minus unknown gaps) over raw wall-clock
-        session time, which would otherwise include macOS sleep.
-
-        Clamped to [0, wall_clock_seconds] so a bad/stale duration value
-        can never inflate working time beyond what the session's own
-        login/logout timestamps allow.
-        """
-        duration_seconds = session.duration_seconds
-
-        if duration_seconds is None:
-            return wall_clock_seconds
-
-        return max(
-            0,
-            min(duration_seconds, wall_clock_seconds),
-        )
 
     @staticmethod
     def get_productivity(db: DBSession):
@@ -123,65 +75,29 @@ class ProductivityService:
             # Session elapsed time
             # ----------------------------------------
 
-            wall_clock_seconds = max(
-                int((logout_time - login_time).total_seconds()),
-                0,
+            # Canonical interval representation -- the single source of
+            # truth for ACTIVE/IDLE/SLEEP_GAP, shared with
+            # ProductivityReportService and the Activity Timeline/Activity
+            # Details UI (TimelineService.build()). Deliberately does not
+            # use session.duration_seconds -- see TimelineService's
+            # docstring for why that field isn't treated as authoritative.
+            segments = TimelineService.build(
+                db,
+                session,
+                login_time,
+                logout_time,
             )
 
-            working_seconds = (
-                ProductivityService._effective_working_seconds(
-                    session,
-                    wall_clock_seconds,
-                )
-            )
+            segment_totals = TimelineService.totals_by_type(segments)
 
-            # ----------------------------------------
-            # Idle events
-            # ----------------------------------------
+            active_seconds = segment_totals.get("ACTIVE", 0)
+            idle_seconds = segment_totals.get("IDLE", 0)
+            working_seconds = active_seconds + idle_seconds
 
-            idle_events = (
-                db.query(IdleEvent)
-                .filter(
-                    IdleEvent.session_id == session.id,
-                )
-                .order_by(
-                    IdleEvent.idle_start.asc()
-                )
-                .all()
-            )
-
-            idle_seconds = 0
-
-            for idle in idle_events:
-
-                idle_start = ProductivityService._normalize(
-                    idle.idle_start
-                )
-
-                idle_end = (
-                    ProductivityService._normalize(
-                        idle.idle_end
-                    )
-                    if idle.idle_end
-                    else now
-                )
-
-                idle_seconds += ProductivityService._overlap_seconds(
-                    login_time,
-                    logout_time,
-                    idle_start,
-                    idle_end,
-                )
-
-            idle_seconds = min(
-                idle_seconds,
-                working_seconds,
-            )
-
-            active_seconds = max(
-                working_seconds - idle_seconds,
-                0,
-            )
+            # Sleep/unknown-gap time is simply whatever was excluded from
+            # monitored (working) time -- no separate accounting model,
+            # just the SLEEP_GAP segments' own total.
+            sleep_seconds = segment_totals.get("SLEEP_GAP", 0)
 
             productivity = (
                 round(
@@ -267,55 +183,21 @@ class ProductivityService:
                 if app_end < app_start:
                     continue
 
-                elapsed_seconds = int(
-                    (app_end - app_start).total_seconds()
+                # Scope this application's usage span to the same
+                # canonical ACTIVE/IDLE/SLEEP_GAP segments the session
+                # totals use, so an app is never credited with active or
+                # idle time during a stretch the device wasn't even being
+                # observed (SLEEP_GAP overlap is simply excluded, the same
+                # way session-level working_seconds excludes it).
+                app_by_type = TimelineService.overlap_seconds_by_type(
+                    segments,
+                    app_start,
+                    app_end,
                 )
 
-                # An application cannot have been active longer than the
-                # session's own monitored-awake duration.
-                elapsed_seconds = min(
-                    elapsed_seconds,
-                    working_seconds,
-                )
-
-                # ----------------------------------------
-                # Idle time overlapping this application
-                # ----------------------------------------
-
-                app_idle_seconds = 0
-
-                for idle in idle_events:
-
-                    idle_start = ProductivityService._normalize(
-                        idle.idle_start
-                    )
-
-                    idle_end = (
-                        ProductivityService._normalize(
-                            idle.idle_end
-                        )
-                        if idle.idle_end
-                        else now
-                    )
-
-                    app_idle_seconds += (
-                        ProductivityService._overlap_seconds(
-                            app_start,
-                            app_end,
-                            idle_start,
-                            idle_end,
-                        )
-                    )
-
-                app_idle_seconds = min(
-                    app_idle_seconds,
-                    elapsed_seconds,
-                )
-
-                app_active_seconds = max(
-                    elapsed_seconds - app_idle_seconds,
-                    0,
-                )
+                app_active_seconds = app_by_type.get("ACTIVE", 0)
+                app_idle_seconds = app_by_type.get("IDLE", 0)
+                elapsed_seconds = app_active_seconds + app_idle_seconds
 
                 name = app.application_name or "Unknown"
 
@@ -346,7 +228,7 @@ class ProductivityService:
 
             application_usage = sorted(
                 application_totals.values(),
-                key=lambda x: x["active_seconds"],
+                key=lambda x: x["elapsed_seconds"],
                 reverse=True,
             )
 
@@ -362,6 +244,7 @@ class ProductivityService:
                     "working_seconds": working_seconds,
                     "idle_seconds": idle_seconds,
                     "active_seconds": active_seconds,
+                    "sleep_seconds": sleep_seconds,
 
                     "productivity_percent": productivity,
 

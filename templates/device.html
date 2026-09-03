@@ -1,274 +1,649 @@
 <!DOCTYPE html>
-<html>
+<html lang="en" data-bs-theme="dark">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<meta charset="UTF-8">
-<title>{{ details.device["Hostname"] }}</title>
+    <title>Device - IX Endpoint Services</title>
 
-<link 
-href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" 
-rel="stylesheet">
-
-<style>
-
-body{
-    background:#f5f7fa;
-}
-
-.card{
-    border:none;
-    border-radius:15px;
-}
-
-.card-header{
-    font-weight:bold;
-}
-
-.table td{
-    vertical-align:middle;
-}
-
-.badge-online{
-    background:#198754;
-}
-
-</style>
-
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+    <link href="/static/css/ix-theme.css" rel="stylesheet">
+    <link href="/static/css/ix-dashboard.css" rel="stylesheet">
 </head>
 
 <body>
 
-<div class="container mt-4">
-
-<a href="/" class="btn btn-secondary mb-3">
-← Dashboard
-</a>
-
-<div class="card shadow">
-
-<div class="card-header bg-primary text-white">
-
-<h3>
-💻 {{ details.device["Hostname"] }}
-</h3>
-
-</div>
-
-<div class="card-body">
-
-<div class="row">
-
-<div class="col-md-6">
-
-<div class="card mb-3">
-
-<div class="card-header bg-dark text-white">
-Overview
-</div>
-
-<table class="table">
-
-<tr>
-<th>User</th>
-<td>{{ details.device["Username"] }}</td>
-</tr>
-
-<tr>
-<th>Status</th>
-<td>
-<span class="badge badge-online">
-{{ details.device["Status"] }}
-</span>
-</td>
-</tr>
-
-<tr>
-<th>Last Seen</th>
-<td>{{ details.device["LastSeen"] }}</td>
-</tr>
-
-<tr>
-<th>Agent Version</th>
-<td>{{ details.device["AgentVersion"] }}</td>
-</tr>
-
-</table>
-
-</div>
-
-<div class="card mb-3">
-
-<div class="card-header bg-success text-white">
-Hardware
-</div>
-
-<table class="table">
-
-<tr>
-<th>Model</th>
-<td>{{ details.device["Model"] }}</td>
-</tr>
-
-<tr>
-<th>Serial</th>
-<td>{{ details.device["Serial"] }}</td>
-</tr>
-
-<tr>
-<th>Operating System</th>
-<td>{{ details.device["OSVersion"] }}</td>
-</tr>
-
-{% if details.inventory %}
-
-<tr>
-<th>CPU</th>
-<td>{{ details.inventory["CPUModel"] }}</td>
-</tr>
-
-<tr>
-<th>Memory</th>
-<td>{{ details.inventory["MemoryInstalled"] }}</td>
-</tr>
-
-<tr>
-<th>Disk</th>
-<td>{{ details.inventory["DiskSize"] }}</td>
-</tr>
-
-{% endif %}
-
-</table>
-
-</div>
-
-</div>
-
-<div class="col-md-6">
-
-<div class="card mb-3">
-
-<div class="card-header bg-info text-white">
-Network
-</div>
-
-<table class="table">
-
-<tr>
-<th>IP Address</th>
-<td>{{ details.device["IPAddress"] }}</td>
-</tr>
-
-{% if details.inventory %}
-
-<tr>
-<th>MAC Address</th>
-<td>{{ details.inventory["MACAddress"] }}</td>
-</tr>
-
-<tr>
-<th>Gateway</th>
-<td>{{ details.inventory["Gateway"] }}</td>
-</tr>
-
-<tr>
-<th>DNS</th>
-<td>{{ details.inventory["DNS"] }}</td>
-</tr>
-
-<tr>
-<th>WiFi</th>
-<td>{{ details.inventory["WiFiSSID"] }}</td>
-</tr>
-
-{% endif %}
-
-</table>
-
-</div>
-
-<div class="card mb-3">
-
-<div class="card-header bg-warning">
-Health
-</div>
-
-<table class="table">
-
-<tr>
-<th>CPU Usage</th>
-<td>{{ details.device["CPU"] }}%</td>
-</tr>
-
-<tr>
-<th>Memory Usage</th>
-<td>{{ details.device["Memory"] }}%</td>
-</tr>
-
-<tr>
-<th>Disk Usage</th>
-<td>{{ details.device["Disk"] }}%</td>
-</tr>
-
-</table>
-
-</div>
-
-</div>
-
-</div>
-
-<div class="card mt-4">
-
-<div class="card-header bg-secondary text-white">
-
-Installed Applications
-({{ details.applications|length }})
-
-</div>
-
-<table class="table table-striped">
-
-<thead>
-
-<tr>
-
-<th>Application</th>
-<th>Version</th>
-<th>Bundle ID</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-{% for app in details.applications %}
-
-<tr>
-
-<td>{{ app["AppName"] }}</td>
-
-<td>{{ app["Version"] }}</td>
-
-<td>{{ app["BundleID"] }}</td>
-
-</tr>
-
-{% endfor %}
-
-</tbody>
-
-</table>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
+    <div class="ix-shell">
+
+        <aside class="ix-sidebar">
+            <div class="ix-wordmark">
+                <img src="/static/img/ix-logo.png" alt="Intellectyx">
+                <span class="ix-wordmark-sub">IX Endpoint Services</span>
+            </div>
+
+            <nav class="ix-sidebar-nav">
+                <a href="/" class="ix-sidebar-link">
+                    <svg class="ix-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="11" width="8" height="10" rx="1.5"/><rect x="3" y="14" width="8" height="7" rx="1.5"/></svg>
+                    Dashboard
+                </a>
+                <a href="/#devices" class="ix-sidebar-link active">
+                    <svg class="ix-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+                    Devices
+                </a>
+            </nav>
+
+            <div class="ix-sidebar-footer">
+                <a href="#" class="ix-sidebar-link" id="sidebarLogout">
+                    <svg class="ix-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                    Logout
+                </a>
+            </div>
+        </aside>
+
+        <div class="ix-main">
+            <header class="ix-topheader">
+                <div>
+                    <div class="ix-topheader-title" id="headerTitle">Device</div>
+                    <div class="ix-topheader-crumbs">Dashboard / Devices / <span id="headerCrumb">-</span></div>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="ix-user-chip" id="userChip"></span>
+                    <button class="btn ix-btn-outline btn-sm" id="logoutBtn">Logout</button>
+                </div>
+            </header>
+
+            <div class="ix-content">
+
+                <a href="/#devices" class="ix-back-link">&larr; Back to devices</a>
+
+                <div class="ix-card p-3 mt-2 mb-3 ix-device-header">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div>
+                            <h4 class="mb-1" id="deviceHostname">-</h4>
+                            <div class="text-muted small" id="deviceUser">-</div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-4">
+                            <div>
+                                <div class="ix-kpi-label">Status</div>
+                                <div id="deviceStatus">-</div>
+                            </div>
+                            <div>
+                                <div class="ix-kpi-label">IP Address</div>
+                                <div class="fw-semibold" id="deviceIp">-</div>
+                            </div>
+                            <div>
+                                <div class="ix-kpi-label">Agent</div>
+                                <div class="fw-semibold" id="deviceAgent">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ix-tabs mb-3">
+                    <button class="ix-tab active" data-tab="monitor">MONITOR</button>
+                    <button class="ix-tab" data-tab="health">MAC HEALTH</button>
+                </div>
+
+                <!-- ================= MONITOR TAB ================= -->
+                <div class="ix-tab-panel active" id="panel-monitor">
+
+                    <div id="reportPeriodContainer"></div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-6 col-xl">
+                            <div class="ix-kpi-card">
+                                <div class="ix-kpi-label">Active</div>
+                                <div class="ix-kpi-value ix-accent" id="kpiActive">-</div>
+                                <div class="ix-kpi-note">Monitored awake time</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="ix-kpi-card">
+                                <div class="ix-kpi-label">Idle</div>
+                                <div class="ix-kpi-value" id="kpiIdle">-</div>
+                                <div class="ix-kpi-note">Idle time (monitored)</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="ix-kpi-card">
+                                <div class="ix-kpi-label">Sleep</div>
+                                <div class="ix-kpi-value" style="color: var(--ix-sleep);" id="kpiSleep">-</div>
+                                <div class="ix-kpi-note">Excluded from monitored time</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="ix-kpi-card">
+                                <div class="ix-kpi-label">Productivity</div>
+                                <div class="ix-kpi-value" id="kpiProductivity">-</div>
+                                <div class="ix-kpi-note">Active / Monitored</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="ix-kpi-card">
+                                <div class="ix-kpi-label">Monitored Time</div>
+                                <div class="ix-kpi-value" id="kpiMonitored">-</div>
+                                <div class="ix-kpi-note">Active + Idle (excl. sleep &amp; gap)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-lg-5">
+                            <div class="ix-card p-3 h-100">
+                                <h6 class="fw-semibold mb-3">Productivity</h6>
+                                <div id="donutContainer"></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="ix-card p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                    <h6 class="fw-semibold mb-0">Activity Timeline</h6>
+                                    <div class="ix-day-select" id="daySelectContainer" style="display:none;">
+                                        <label class="ix-form-label mb-0">Day</label>
+                                        <select id="daySelect"></select>
+                                    </div>
+                                </div>
+                                <div id="timelineContainer"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ix-card p-3 mb-3">
+                        <h6 class="fw-semibold mb-3">Activity Details <span class="ix-tz-indicator">(IST)</span></h6>
+                        <div id="activityDetailsContainer"></div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-lg-5">
+                            <div class="ix-card p-3 h-100">
+                                <h6 class="fw-semibold mb-3">Top Applications</h6>
+                                <div id="appChart"></div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="ix-card p-3 h-100">
+                                <h6 class="fw-semibold mb-3">Application Usage</h6>
+                                <div id="appTable"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ix-card p-3" id="periodSummaryCard" style="display:none;">
+                        <h6 class="fw-semibold mb-3">Period Summary</h6>
+                        <div id="trendChart" class="mb-3"></div>
+                        <div class="table-responsive">
+                            <table class="ix-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Monitored</th>
+                                        <th>Active</th>
+                                        <th>Idle</th>
+                                        <th>Sleep</th>
+                                        <th>Productivity</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="periodSummaryBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ================= MAC HEALTH TAB ================= -->
+                <div class="ix-tab-panel" id="panel-health">
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6 col-xl-3">
+                            <div class="ix-health-card">
+                                <div class="ix-health-title">System</div>
+                                <div id="healthSystem"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-xl-3">
+                            <div class="ix-health-card">
+                                <div class="ix-health-title">Hardware</div>
+                                <div id="healthHardware"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-xl-3">
+                            <div class="ix-health-card">
+                                <div class="ix-health-title">Storage</div>
+                                <div id="healthStorage"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-xl-3">
+                            <div class="ix-health-card">
+                                <div class="ix-health-title">Network</div>
+                                <div id="healthNetwork"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ix-card p-3">
+                        <h6 class="fw-semibold mb-2">Installed Applications</h6>
+                        <div class="table-responsive">
+                            <table class="ix-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Version</th>
+                                        <th>Bundle ID</th>
+                                        <th>Last Seen</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="installedAppsBody">
+                                    <tr><td colspan="4" class="text-center text-muted py-3">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/static/js/format.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/app-icons.js"></script>
+    <script src="/static/js/report-period.js"></script>
+    <script src="/static/js/timeline.js"></script>
+    <script src="/static/js/dashboard-charts.js"></script>
+    <script>
+        IXAuth.requireAuth();
+
+        const user = IXAuth.getUser();
+        if (user) {
+            document.getElementById("userChip").innerHTML =
+                `${user.username}${user.role ? ` <span class="ix-role-pill">${user.role}</span>` : ""}`;
+        }
+        document.getElementById("logoutBtn").addEventListener("click", () => IXAuth.logout());
+        document.getElementById("sidebarLogout").addEventListener("click", (e) => {
+            e.preventDefault();
+            IXAuth.logout();
+        });
+
+        const deviceId = window.location.pathname.split("/").filter(Boolean).pop();
+        let currentDevice = null;
+        let currentPeriodDates = []; // ["2026-09-01", ...] every calendar day in the selected range
+
+        // ---------- Tabs ----------
+        document.querySelectorAll(".ix-tab").forEach(tab => {
+            tab.addEventListener("click", () => {
+                document.querySelectorAll(".ix-tab").forEach(t => t.classList.remove("active"));
+                document.querySelectorAll(".ix-tab-panel").forEach(p => p.classList.remove("active"));
+                tab.classList.add("active");
+                document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+            });
+        });
+
+        function naRow(label, value) {
+            const isNA = value === null || value === undefined || value === "";
+            return `<div class="ix-health-row"><span class="label">${label}</span>
+                <span class="value ${isNA ? 'na' : ''}">${isNA ? "Not Available" : value}</span></div>`;
+        }
+
+        function statusBadge(status) {
+            const isOnline = status === "ONLINE";
+            const cls = isOnline ? "ix-badge-online" : "ix-badge-offline";
+            return `<span class="ix-badge ${cls}"><span class="ix-badge-dot"></span>${status}</span>`;
+        }
+
+        function enumerateDates(startStr, endStr) {
+            const dates = [];
+            let cur = new Date(startStr + "T00:00:00");
+            const end = new Date(endStr + "T00:00:00");
+            while (cur <= end) {
+                dates.push(IXFormat.isoDate(cur));
+                cur.setDate(cur.getDate() + 1);
+            }
+            return dates;
+        }
+
+        // ---------- Device header ----------
+        async function loadDeviceHeader() {
+            const res = await IXAuth.authFetch(`/api/device/${deviceId}`);
+            if (!res.ok) {
+                document.getElementById("deviceHostname").textContent = "Device not found";
+                return null;
+            }
+            const device = await res.json();
+
+            document.getElementById("headerTitle").textContent = device.hostname;
+            document.getElementById("headerCrumb").textContent = device.hostname;
+            document.getElementById("deviceHostname").textContent = device.hostname;
+            document.getElementById("deviceUser").textContent = `User: ${device.username}`;
+            document.getElementById("deviceStatus").innerHTML = statusBadge(device.status);
+            document.getElementById("deviceIp").textContent = device.ip_address || "-";
+            document.getElementById("deviceAgent").textContent = device.agent_version || "-";
+
+            return device;
+        }
+
+        // ---------- Monitor tab: report-period-driven ----------
+        async function fetchReportRange(startDate, endDate) {
+            const res = await IXAuth.authFetch(
+                `/api/dashboard/productivity-report?report_type=daily&start_date=${startDate}&end_date=${endDate}&device_id=${deviceId}`
+            );
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.reports || [];
+        }
+
+        function aggregateByDate(reports) {
+            const byDate = {};
+            for (const row of reports) {
+                if (!byDate[row.period_start]) {
+                    byDate[row.period_start] = {
+                        period_start: row.period_start,
+                        working_seconds: 0, idle_seconds: 0, active_seconds: 0, sleep_seconds: 0,
+                        applications: {},
+                    };
+                }
+                const agg = byDate[row.period_start];
+                agg.working_seconds += row.working_seconds;
+                agg.idle_seconds += row.idle_seconds;
+                agg.active_seconds += row.active_seconds;
+                agg.sleep_seconds += row.sleep_seconds;
+                for (const app of row.applications) {
+                    if (!agg.applications[app.application]) {
+                        agg.applications[app.application] = { application: app.application, elapsed_seconds: 0, idle_seconds: 0, active_seconds: 0 };
+                    }
+                    const a = agg.applications[app.application];
+                    a.elapsed_seconds += app.elapsed_seconds;
+                    a.idle_seconds += app.idle_seconds;
+                    a.active_seconds += app.active_seconds;
+                }
+            }
+            return byDate;
+        }
+
+        function renderKpis(totals) {
+            const monitored = totals.working_seconds;
+            const productivityPct = monitored > 0 ? (totals.active_seconds / monitored) * 100 : 0;
+
+            document.getElementById("kpiActive").textContent = IXFormat.duration(totals.active_seconds);
+            document.getElementById("kpiIdle").textContent = IXFormat.duration(totals.idle_seconds);
+            document.getElementById("kpiSleep").textContent = IXFormat.duration(totals.sleep_seconds);
+            document.getElementById("kpiProductivity").textContent = IXFormat.pct(productivityPct);
+            document.getElementById("kpiMonitored").textContent = IXFormat.duration(monitored);
+
+            IXCharts.renderDonut(document.getElementById("donutContainer"), {
+                activeSeconds: totals.active_seconds,
+                idleSeconds: totals.idle_seconds,
+                sleepSeconds: totals.sleep_seconds,
+                productivityPercent: productivityPct,
+            });
+        }
+
+        function renderApplications(applicationsMap) {
+            const apps = Object.values(applicationsMap).sort((a, b) => b.elapsed_seconds - a.elapsed_seconds);
+
+            const top = apps.slice(0, 5);
+            const maxElapsed = top.length ? top[0].elapsed_seconds : 1;
+
+            document.getElementById("appChart").innerHTML = top.length ? top.map(a => `
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span class="fw-semibold">${a.application}</span>
+                        <span class="text-muted">${IXFormat.duration(a.elapsed_seconds)}</span>
+                    </div>
+                    <div class="ix-app-bar-track">
+                        <div class="ix-app-bar-fill" style="width: ${(a.elapsed_seconds / maxElapsed) * 100}%;"></div>
+                    </div>
+                </div>
+            `).join("") : `<div class="text-muted small">No application usage recorded for this period.</div>`;
+
+            document.getElementById("appTable").innerHTML = apps.length ? apps.map(a => `
+                <div class="ix-app-row">
+                    <div class="ix-app-icon">${IXAppIcons.iconHtml(a.application)}</div>
+                    <div class="flex-grow-1">
+                        <div class="ix-app-name">${a.application}</div>
+                        <div class="ix-app-meta">
+                            Active: ${IXFormat.duration(a.active_seconds)} &middot;
+                            Idle: ${IXFormat.duration(a.idle_seconds)} &middot;
+                            Total: ${IXFormat.duration(a.elapsed_seconds)}
+                        </div>
+                    </div>
+                </div>
+            `).join("") : `<div class="text-muted small">No application usage recorded for this period.</div>`;
+        }
+
+        function renderPeriodSummary(byDate, allDates) {
+            const card = document.getElementById("periodSummaryCard");
+
+            if (allDates.length <= 1) {
+                card.style.display = "none";
+                return;
+            }
+            card.style.display = "block";
+
+            const rows = allDates.map(d => byDate[d] || null);
+
+            document.getElementById("periodSummaryBody").innerHTML = rows.map((row, i) => {
+                if (!row) {
+                    return `<tr class="text-muted"><td>${IXFormat.date(allDates[i])}</td>
+                        <td colspan="5">Not Available</td></tr>`;
+                }
+                const pct = row.working_seconds > 0 ? (row.active_seconds / row.working_seconds) * 100 : 0;
+                return `<tr>
+                    <td>${IXFormat.date(row.period_start)}</td>
+                    <td>${IXFormat.duration(row.working_seconds)}</td>
+                    <td>${IXFormat.duration(row.active_seconds)}</td>
+                    <td>${IXFormat.duration(row.idle_seconds)}</td>
+                    <td>${IXFormat.duration(row.sleep_seconds)}</td>
+                    <td>${IXFormat.pct(pct)}</td>
+                </tr>`;
+            }).join("");
+
+            IXCharts.renderTrend(document.getElementById("trendChart"), rows.filter(Boolean));
+        }
+
+        function populateDaySelect(allDates, selected, onSelect) {
+            const container = document.getElementById("daySelectContainer");
+            const select = document.getElementById("daySelect");
+
+            if (allDates.length <= 1) {
+                container.style.display = "none";
+                return;
+            }
+            container.style.display = "flex";
+
+            select.innerHTML = allDates.map(d => `<option value="${d}" ${d === selected ? "selected" : ""}>${IXFormat.date(d)}</option>`).join("");
+            select.onchange = () => onSelect(select.value);
+        }
+
+        function renderActivityDetails(mergedSegments) {
+            // Renders the canonical timeline segments as-is (already
+            // built server-side by TimelineService, already merged by
+            // IXTimeline.mergeSegments) -- purely a presentation pass,
+            // no activity recalculation happens here.
+            const container = document.getElementById("activityDetailsContainer");
+
+            if (!mergedSegments.length) {
+                container.innerHTML = `<div class="text-muted small p-2">No activity recorded for this period.</div>`;
+                return;
+            }
+
+            const rows = mergedSegments.map((seg, index) => `
+                <tr class="ix-activity-row" id="activityRow-${index}" data-seg-index="${index}">
+                    <td>${IXFormat.time(seg.start)}</td>
+                    <td>${IXFormat.time(seg.end)}</td>
+                    <td class="ix-activity-status-cell">
+                        <span class="ix-legend-swatch ix-timeline-seg-${seg.type}"></span>${IXTimeline.typeLabel(seg.type)}
+                    </td>
+                    <td class="text-end">${IXFormat.durationShort(seg.duration_seconds)}</td>
+                </tr>
+            `).join("");
+
+            container.innerHTML = `
+                <div class="ix-activity-details">
+                    <table class="ix-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Status</th>
+                                <th class="text-end">Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function scrollToActivityRow(index) {
+            const row = document.getElementById(`activityRow-${index}`);
+            if (!row) return;
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+            row.classList.add("ix-row-highlight");
+            setTimeout(() => row.classList.remove("ix-row-highlight"), 1500);
+        }
+
+        async function loadTimelineForDay(day) {
+            const timelineEl = document.getElementById("timelineContainer");
+            const res = await IXAuth.authFetch(`/api/device/${deviceId}/timeline?date=${day}`);
+            if (!res.ok) {
+                timelineEl.innerHTML = `<div class="text-muted small p-2">No timeline data available.</div>`;
+                renderActivityDetails([]);
+                return;
+            }
+            const data = await res.json();
+            IXTimeline.render(timelineEl, data, {
+                onSegmentClick: (index) => scrollToActivityRow(index),
+            });
+            renderActivityDetails(IXTimeline.mergeSegments(data.segments || []));
+        }
+
+        async function handlePeriodChange({ start_date, end_date }) {
+            currentPeriodDates = enumerateDates(start_date, end_date);
+
+            const reports = await fetchReportRange(start_date, end_date);
+            const byDate = aggregateByDate(reports);
+
+            const totals = { working_seconds: 0, idle_seconds: 0, active_seconds: 0, sleep_seconds: 0, applications: {} };
+            for (const day of Object.values(byDate)) {
+                totals.working_seconds += day.working_seconds;
+                totals.idle_seconds += day.idle_seconds;
+                totals.active_seconds += day.active_seconds;
+                totals.sleep_seconds += day.sleep_seconds;
+                for (const [name, app] of Object.entries(day.applications)) {
+                    if (!totals.applications[name]) {
+                        totals.applications[name] = { application: name, elapsed_seconds: 0, idle_seconds: 0, active_seconds: 0 };
+                    }
+                    totals.applications[name].elapsed_seconds += app.elapsed_seconds;
+                    totals.applications[name].idle_seconds += app.idle_seconds;
+                    totals.applications[name].active_seconds += app.active_seconds;
+                }
+            }
+
+            renderKpis(totals);
+            renderApplications(totals.applications);
+            renderPeriodSummary(byDate, currentPeriodDates);
+
+            const defaultDay = currentPeriodDates[currentPeriodDates.length - 1];
+            populateDaySelect(currentPeriodDates, defaultDay, (day) => loadTimelineForDay(day));
+            await loadTimelineForDay(defaultDay);
+        }
+
+        // ---------- MAC Health tab ----------
+        async function loadHealth(device) {
+            const res = await IXAuth.authFetch(`/api/device/${deviceId}/health`);
+            const heartbeat = res.ok ? await res.json() : null;
+
+            document.getElementById("healthSystem").innerHTML =
+                naRow("Hostname", device.hostname) +
+                naRow("Username", device.username) +
+                naRow("macOS Version", device.os_version) +
+                naRow("Agent Version", device.agent_version) +
+                naRow("Serial Number", device.serial_number) +
+                naRow("Model", device.model) +
+                naRow("Device Uptime", heartbeat ? IXFormat.uptime(heartbeat.uptime_seconds) : null);
+
+            const cpuLive = heartbeat ? ` (${heartbeat.cpu.toFixed(0)}% utilized)` : "";
+            const memLive = heartbeat ? ` (${heartbeat.memory.toFixed(0)}% utilized)` : "";
+
+            document.getElementById("healthHardware").innerHTML =
+                naRow("CPU", device.processor ? device.processor + cpuLive : null) +
+                naRow("Memory", device.memory_gb ? `${device.memory_gb} GB${memLive}` : null);
+
+            let storageHtml;
+            if (device.storage_gb && heartbeat && heartbeat.disk !== null && heartbeat.disk !== undefined) {
+                const used = (device.storage_gb * heartbeat.disk) / 100;
+                const free = device.storage_gb - used;
+                storageHtml =
+                    naRow("Capacity", `${device.storage_gb.toFixed(0)} GB`) +
+                    naRow("Used", `${used.toFixed(1)} GB`) +
+                    naRow("Free", `${free.toFixed(1)} GB`) +
+                    naRow("Usage %", `${heartbeat.disk.toFixed(1)}%`);
+            } else {
+                storageHtml =
+                    naRow("Capacity", device.storage_gb ? `${device.storage_gb.toFixed(0)} GB` : null) +
+                    naRow("Used", null) +
+                    naRow("Free", null) +
+                    naRow("Usage %", null);
+            }
+            document.getElementById("healthStorage").innerHTML = storageHtml;
+
+            document.getElementById("healthNetwork").innerHTML =
+                naRow("IP Address", device.ip_address || (heartbeat && heartbeat.ip_address)) +
+                // The server now has a real mac_address column/field
+                // (device_heartbeats.mac_address -> /health's
+                // "mac_address") ready to receive and display the
+                // agent-reported hardware MAC address. It renders
+                // honestly as "Not Available" until an agent version
+                // actually reports one -- never invented.
+                naRow("MAC Address", heartbeat ? IXFormat.macAddress(heartbeat.mac_address) : null);
+        }
+
+        async function loadInstalledApplications() {
+            const res = await IXAuth.authFetch(`/api/device/${deviceId}/installed-applications`);
+            const tbody = document.getElementById("installedAppsBody");
+
+            if (!res.ok) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">Unable to load.</td></tr>`;
+                return;
+            }
+
+            const apps = await res.json();
+
+            if (!apps.length) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">No installed applications recorded.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = apps.map(a => `
+                <tr>
+                    <td>${a.name}</td>
+                    <td>${a.version || "-"}</td>
+                    <td>${a.bundle_id || "-"}</td>
+                    <td>${IXFormat.dateTime(a.last_seen)}</td>
+                </tr>
+            `).join("");
+        }
+
+        async function init() {
+            currentDevice = await loadDeviceHeader();
+            if (!currentDevice) return;
+
+            IXReportPeriod.mount(document.getElementById("reportPeriodContainer"), {
+                defaultPreset: "today",
+                onChange: handlePeriodChange,
+            });
+
+            await loadHealth(currentDevice);
+            await loadInstalledApplications();
+        }
+
+        init();
+    </script>
 
 </body>
 

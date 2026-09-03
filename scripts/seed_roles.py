@@ -15,6 +15,7 @@ DEFAULT_ROLES: List[dict] = [
     {"name": "Manager", "description": "Managerial role with team oversight permissions."},
     {"name": "Employee", "description": "Standard employee role with limited access."},
     {"name": "Auditor", "description": "Read-only access for auditing and reporting."},
+    {"name": "MONITOR", "description": "Read-only dashboard access for endpoint monitoring."},
 ]
 
 

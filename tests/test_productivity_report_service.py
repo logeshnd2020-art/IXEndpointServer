@@ -3,13 +3,15 @@ from datetime import date, datetime
 from app.models.session import Session
 from app.models.idle import IdleEvent
 from app.models.application import Application
+from app.models.device_heartbeat import DeviceHeartbeat
 from app.services.productivity_report_service import ProductivityReportService
 
 
-def _make_cross_day_session(db_session, device, duration_seconds):
+def _make_cross_day_session(db_session, device, duration_seconds=None):
     # Naive datetimes are treated as Asia/Kolkata local time by the
     # service, matching how the endpoint-local agent timestamps are
     # stored. 8h wall clock split 4h/4h across the midnight boundary.
+    # Day 1's UTC overlap window works out to 14:30-18:30 UTC.
     session = Session(
         device_id=device.id,
         local_session_id=1,
@@ -25,6 +27,19 @@ def _make_cross_day_session(db_session, device, duration_seconds):
     return session
 
 
+def _heartbeat(device, ts, uptime=1000):
+    return DeviceHeartbeat(
+        device_id=device.id,
+        cpu_usage=10.0,
+        memory_usage=20.0,
+        disk_usage=30.0,
+        battery_level=100,
+        ip_address="10.0.0.1",
+        uptime_seconds=uptime,
+        timestamp=ts,
+    )
+
+
 def _reports_by_day(db_session):
     reports = ProductivityReportService.get_reports(
         db=db_session,
@@ -36,6 +51,9 @@ def _reports_by_day(db_session):
 
 
 def test_cross_day_session_without_duration_uses_raw_wall_clock(db_session, device):
+    # No heartbeat evidence of a gap -> each day's full wall-clock share
+    # of the session counts as monitored (MonitoringWindowService's
+    # documented default).
     _make_cross_day_session(db_session, device, duration_seconds=None)
 
     by_day = _reports_by_day(db_session)
@@ -44,45 +62,40 @@ def test_cross_day_session_without_duration_uses_raw_wall_clock(db_session, devi
     assert by_day["2026-09-02"]["working_seconds"] == 14400
 
 
-def test_cross_day_session_prorates_monitored_duration_across_days(db_session, device):
-    # 8h wall clock, but only 4000s of it was monitored-awake time (the
-    # rest was macOS sleep overnight). Each day touched by the session
-    # gets an equal share since the session splits it exactly 50/50.
-    _make_cross_day_session(db_session, device, duration_seconds=4000)
-
-    by_day = _reports_by_day(db_session)
-
-    assert by_day["2026-09-01"]["working_seconds"] == 2000
-    assert by_day["2026-09-02"]["working_seconds"] == 2000
-
-    # The proportional split must reconstruct the reported total.
-    total = (
-        by_day["2026-09-01"]["working_seconds"]
-        + by_day["2026-09-02"]["working_seconds"]
-    )
-    assert total == 4000
-
-
-def test_cross_day_session_duration_greater_than_wall_clock_is_clamped_per_day(
-    db_session, device
-):
-    _make_cross_day_session(db_session, device, duration_seconds=999_999)
-
-    by_day = _reports_by_day(db_session)
-
-    # A single day can never receive more than its own wall-clock overlap
-    # with the session, even if the stored duration is corrupt.
-    assert by_day["2026-09-01"]["working_seconds"] == 14400
-    assert by_day["2026-09-02"]["working_seconds"] == 14400
-
-
-def test_report_idle_seconds_cannot_exceed_monitored_duration_for_period(
-    db_session, device
-):
+def test_duration_seconds_is_ignored_for_report_even_when_present(db_session, device):
+    # Canonical accounting design decision: session.duration_seconds is
+    # never used, even when present -- confirmed empirically to disagree
+    # with real heartbeat evidence by a wide margin. Heartbeats show only
+    # the first hour of day 1's 4h (14400s) overlap as monitored; a
+    # duration_seconds claiming otherwise must have zero effect.
     session = _make_cross_day_session(db_session, device, duration_seconds=4000)
 
-    # Idle spans the entire first day's overlap window (4h = 14400s),
-    # which is far more than that day's 2000s monitored-awake share.
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.commit()
+
+    by_day = _reports_by_day(db_session)
+
+    # Heartbeat-derived monitored time for day 1 (~1h), not the claimed
+    # duration_seconds share (2000s) and not the full 14400s wall clock.
+    day1 = by_day["2026-09-01"]
+    assert day1["working_seconds"] not in (4000, 2000)
+    assert day1["working_seconds"] < 14400
+
+
+def test_report_idle_seconds_cannot_exceed_monitored_time_for_period(
+    db_session, device
+):
+    # Heartbeats only cover the first hour of day 1's 4h overlap window
+    # -- the rest is an unmonitored gap.
+    session = _make_cross_day_session(db_session, device, duration_seconds=None)
+
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.commit()
+
+    # Idle spans the entire first day's overlap window, well beyond the
+    # ~1h that was actually monitored.
     idle = IdleEvent(
         device_id=device.id,
         session_id=session.id,
@@ -94,17 +107,69 @@ def test_report_idle_seconds_cannot_exceed_monitored_duration_for_period(
 
     by_day = _reports_by_day(db_session)
 
-    assert by_day["2026-09-01"]["idle_seconds"] == 2000
-    assert by_day["2026-09-01"]["active_seconds"] == 0
+    day1 = by_day["2026-09-01"]
+    assert day1["idle_seconds"] == day1["working_seconds"]
+    assert day1["active_seconds"] == 0
+    assert day1["idle_seconds"] < 14400
 
 
-def test_report_application_elapsed_clamped_to_monitored_duration_for_period(
+def test_sleep_seconds_is_wall_clock_minus_working_when_gap_detected(db_session, device):
+    # 4h (14400s) day-1 overlap window, but heartbeats only cover the
+    # first hour -- the rest must show up as sleep, not silently as 0.
+    _make_cross_day_session(db_session, device, duration_seconds=None)
+
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.commit()
+
+    by_day = _reports_by_day(db_session)
+
+    day1 = by_day["2026-09-01"]
+    assert day1["sleep_seconds"] > 0
+    assert day1["working_seconds"] + day1["sleep_seconds"] == 14400
+
+
+def test_sleep_seconds_from_heartbeat_gap_when_duration_unknown(db_session, device):
+    # No agent-reported duration_seconds -- Sleep must still be derivable
+    # from the device's own heartbeat gaps, not silently read as 0.
+    #
+    # Session login/logout are naive datetimes treated as IST local time
+    # (matching the agent's session-sync convention), but device_heartbeat
+    # timestamps are treated as naive UTC (matching the agent's heartbeat
+    # convention) -- these two must not be confused. login_time
+    # 2026-09-01 20:00 IST == 2026-09-01 14:30 UTC, so day 1's overlap
+    # window in UTC is 14:30-18:30.
+    session = _make_cross_day_session(db_session, device, duration_seconds=None)
+
+    # Heartbeats only during the first hour of day 1's 4h UTC overlap
+    # (14:30-15:30), then nothing for the rest of that window -- a large
+    # gap inside day 1's window.
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.commit()
+
+    by_day = _reports_by_day(db_session)
+
+    day1 = by_day["2026-09-01"]
+    # Day 1's 4h (14400s) overlap had heartbeat coverage for only the
+    # first hour -- the remaining ~3h must show up as sleep, not as
+    # working/idle time.
+    assert day1["sleep_seconds"] > 0
+    assert day1["working_seconds"] + day1["sleep_seconds"] == 14400
+    assert day1["working_seconds"] < 14400
+
+
+def test_report_application_elapsed_excludes_unmonitored_gap_time(
     db_session, device
 ):
-    session = _make_cross_day_session(db_session, device, duration_seconds=4000)
+    session = _make_cross_day_session(db_session, device, duration_seconds=None)
 
-    # Application runs the entire first-day overlap (14400s), well beyond
-    # that day's 2000s monitored-awake share.
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 14, 30, 0)))
+    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 15, 30, 0)))
+    db_session.commit()
+
+    # Application runs the entire first-day overlap, well beyond the ~1h
+    # that was actually monitored.
     app = Application(
         device_id=device.id,
         session_id=session.id,
@@ -117,5 +182,7 @@ def test_report_application_elapsed_clamped_to_monitored_duration_for_period(
 
     by_day = _reports_by_day(db_session)
 
-    [app_usage] = by_day["2026-09-01"]["applications"]
-    assert app_usage["elapsed_seconds"] == 2000
+    day1 = by_day["2026-09-01"]
+    [app_usage] = day1["applications"]
+    assert app_usage["elapsed_seconds"] == day1["working_seconds"]
+    assert app_usage["elapsed_seconds"] < 14400
