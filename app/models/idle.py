@@ -38,5 +38,10 @@ class IdleEvent(Base):
         nullable=True,
     )
 
+    local_idle_id = Column(
+        Integer,
+        nullable=True,
+    )
+
     device = relationship("Device")
     session = relationship("Session")

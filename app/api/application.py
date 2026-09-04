@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_device
 from app.core.database import get_db
 from app.schemas.application import (
     ApplicationStartRequest,
@@ -21,6 +22,7 @@ router = APIRouter(
 )
 def start(
     request: ApplicationStartRequest,
+    current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
 
@@ -39,6 +41,7 @@ def start(
 @router.post("/stop")
 def stop(
     request: ApplicationStopRequest,
+    current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
 

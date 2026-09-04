@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -6,4 +6,4 @@ from pydantic import BaseModel
 class ApiResponse(BaseModel):
     success: bool
     message: str
-    data: Any | None = None
+    data: Optional[Any] = None

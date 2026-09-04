@@ -1,3 +1,6 @@
+from typing import Optional
+
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.session import Session as UserSession
@@ -6,33 +9,87 @@ from app.models.session import Session as UserSession
 class SessionRepository:
 
     @staticmethod
-    def create(db: Session, session: UserSession):
+    def create(
+        db: Session,
+        session: UserSession,
+    ) -> UserSession:
+
         db.add(session)
-        db.commit()
-        db.refresh(session)
-        return session
+
+        return SessionRepository._commit_and_refresh(
+            db,
+            session,
+        )
 
     @staticmethod
-    def update(db: Session, session: UserSession):
-        db.commit()
-        db.refresh(session)
-        return session
+    def update(
+        db: Session,
+        session: UserSession,
+    ) -> UserSession:
+
+        return SessionRepository._commit_and_refresh(
+            db,
+            session,
+        )
 
     @staticmethod
-    def get_active(db: Session, device_id: int):
+    def get_active(
+        db: Session,
+        device_id: int,
+    ) -> Optional[UserSession]:
+
         return (
             db.query(UserSession)
             .filter(
                 UserSession.device_id == device_id,
                 UserSession.status == "ACTIVE",
             )
+            .order_by(UserSession.login_time.desc())
             .first()
         )
 
     @staticmethod
-    def get_by_id(db: Session, session_id: int):
+    def get_by_id(
+        db: Session,
+        session_id: int,
+    ) -> Optional[UserSession]:
+
         return (
             db.query(UserSession)
-            .filter(UserSession.id == session_id)
+            .filter(
+                UserSession.id == session_id,
+            )
             .first()
         )
+
+    @staticmethod
+    def get_by_local_session_id(
+        db: Session,
+        device_id: int,
+        local_session_id: int,
+    ) -> Optional[UserSession]:
+
+        return (
+            db.query(UserSession)
+            .filter(
+                UserSession.device_id == device_id,
+                UserSession.local_session_id == local_session_id,
+            )
+            .first()
+        )
+
+    @staticmethod
+    def _commit_and_refresh(
+        db: Session,
+        session: UserSession,
+    ) -> UserSession:
+
+        try:
+            db.commit()
+            db.refresh(session)
+
+        except SQLAlchemyError:
+            db.rollback()
+            raise
+
+        return session

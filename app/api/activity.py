@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_device
 from app.core.database import get_db
 from app.schemas.activity import (
     ActivityRequest,
@@ -20,6 +21,7 @@ router = APIRouter(
 )
 def capture(
     request: ActivityRequest,
+    current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
 

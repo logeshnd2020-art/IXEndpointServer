@@ -20,14 +20,19 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Build database URL from .env
-database_url = URL.create(
-    drivername="postgresql+psycopg2",
-    username=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-    host=os.getenv("DB_HOST"),
-    port=int(os.getenv("DB_PORT")),
-    database=os.getenv("DB_NAME"),
-)
+# Prefer explicit DATABASE_URL environment variable (used for local sqlite runs)
+database_url_env = os.getenv("DATABASE_URL")
+if database_url_env:
+    database_url = database_url_env
+else:
+    database_url = URL.create(
+        drivername="postgresql+psycopg2",
+        username=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT")),
+        database=os.getenv("DB_NAME"),
+    )
 
 
 def run_migrations_offline():
