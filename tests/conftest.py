@@ -126,6 +126,13 @@ def _make_user(db_session, *, username, password, role_name, email=None):
 # rather than hardcoding a password literal.
 TEST_MONITOR_PASSWORD = os.environ.get("TEST_MONITOR_PASSWORD", "test-only-monitor-fixture-password")
 
+# Same rationale as TEST_MONITOR_PASSWORD above: overridable via env, but the
+# fallback is a deliberately obvious test-only string so it can't be mistaken
+# for or reused as a production credential. Tests that log in as "admin" via
+# auth_headers() should import this constant rather than hardcoding a
+# password literal.
+TEST_ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "test-only-admin-fixture-password")
+
 
 @pytest.fixture()
 def monitor_user(db_session):
@@ -142,7 +149,7 @@ def admin_user(db_session):
     return _make_user(
         db_session,
         username="admin",
-        password="REDACTED-ROTATED-CREDENTIAL",
+        password=TEST_ADMIN_PASSWORD,
         role_name="Admin",
     )
 

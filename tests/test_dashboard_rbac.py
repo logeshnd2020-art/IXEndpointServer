@@ -1,4 +1,4 @@
-from tests.conftest import TEST_MONITOR_PASSWORD, auth_headers
+from tests.conftest import TEST_ADMIN_PASSWORD, TEST_MONITOR_PASSWORD, auth_headers
 
 
 def test_anonymous_request_is_unauthorized(client):
@@ -93,7 +93,7 @@ def test_monitor_cannot_manage_enrollment_keys(client, monitor_user):
 
 
 def test_admin_retains_full_access(client, admin_user, device):
-    headers = auth_headers(client, "admin", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "admin", TEST_ADMIN_PASSWORD)
 
     response = client.get("/api/dashboard/summary", headers=headers)
     assert response.status_code == 200
