@@ -7,15 +7,29 @@ from pydantic import BaseModel
 class TimelineSegment(BaseModel):
     start: datetime
     end: datetime
-    # SLEEP_GAP covers both confirmed macOS sleep and any other unobserved
-    # monitoring gap (e.g. agent not running) -- the heartbeat stream
-    # cannot distinguish the two, so both are reported honestly under one
-    # label rather than a fabricated split. See MonitoringWindowService.
+    # SLEEP_CONFIRMED: an explicit sleep/power-state signal established
+    # this interval as genuine sleep. No such signal exists in the current
+    # agent payload/schema, so this state is never actually produced today
+    # -- see WorkSessionClassifier.has_confirmed_sleep_evidence().
+    #
+    # MONITORING_GAP: monitoring evidence (heartbeats) disappeared for a
+    # bounded stretch, flanked by confirmed engagement on both sides. The
+    # cause is unknown -- could be real sleep, could be the agent failing
+    # while the device stayed awake -- and is NOT claimed by this label.
+    # Must never be displayed or treated as confirmed Sleep.
+    #
+    # OFF_SESSION: the system's best available inference, from heartbeat
+    # evidence alone, that this stretch represents the boundary between
+    # two separate periods of engagement rather than a single continuous
+    # interruption -- never a confirmed fact, and never determined from
+    # clock time, day of week, or a fixed schedule. See
+    # WorkSessionClassifier for the exact evidence-based rule.
+    #
     # NO_SESSION means no session was open at all during this stretch
     # (only used by the day-scoped timeline, e.g. before login/after
-    # logout) -- distinct from SLEEP_GAP, which means a session *was*
-    # open but not observed.
-    type: Literal["ACTIVE", "IDLE", "SLEEP_GAP", "NO_SESSION"]
+    # logout) -- distinct from the three gap types above, all of which
+    # mean a session *was* open but not observed.
+    type: Literal["ACTIVE", "IDLE", "SLEEP_CONFIRMED", "MONITORING_GAP", "OFF_SESSION", "NO_SESSION"]
     duration_seconds: int
 
 

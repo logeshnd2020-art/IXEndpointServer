@@ -288,7 +288,11 @@
 
 .ix-timeline-seg-ACTIVE { background: var(--ix-online); }
 .ix-timeline-seg-IDLE { background: var(--ix-idle); }
-.ix-timeline-seg-SLEEP_GAP {
+/* SLEEP_CONFIRMED: genuine sleep/power-state evidence -- currently never
+   produced (no agent version sends such a signal yet), styled here for
+   when it becomes available. Uses the same striped treatment previously
+   used for the old combined SLEEP_GAP type. */
+.ix-timeline-seg-SLEEP_CONFIRMED {
     background-color: var(--ix-sleep);
     background-image: repeating-linear-gradient(
         45deg,
@@ -296,6 +300,32 @@
         rgba(255, 255, 255, 0.18) 4px,
         transparent 4px,
         transparent 8px
+    );
+}
+/* MONITORING_GAP: heartbeat evidence disappeared, cause unknown, flanked
+   by confirmed engagement -- deliberately a DIFFERENT color from
+   SLEEP_CONFIRMED so it is never visually mistaken for confirmed sleep. */
+.ix-timeline-seg-MONITORING_GAP {
+    background-color: var(--ix-text-faint, #6b7280);
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.12) 0,
+        rgba(255, 255, 255, 0.12) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
+/* OFF_SESSION: best-available inference of a boundary between two
+   engagement periods -- distinct again from both Sleep states, since it
+   makes a different (weaker, duration/evidence-based) claim. */
+.ix-timeline-seg-OFF_SESSION {
+    background-color: var(--ix-text-faint, #6b7280);
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.03) 0,
+        rgba(255, 255, 255, 0.03) 5px,
+        transparent 5px,
+        transparent 10px
     );
 }
 .ix-timeline-seg-NO_SESSION {
@@ -349,6 +379,20 @@
     filter: brightness(1.2);
     outline: 1px solid rgba(255, 255, 255, 0.4);
     outline-offset: -1px;
+}
+
+.ix-app-row-clickable {
+    cursor: pointer;
+}
+.ix-app-row-clickable:hover {
+    background: var(--ix-surface-raised);
+}
+.ix-app-drilldown {
+    padding: 0.25rem 0 0.75rem 2.5rem;
+}
+.ix-table-sm th, .ix-table-sm td {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
 }
 
 /* ============ Activity Details ============ */

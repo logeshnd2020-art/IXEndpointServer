@@ -94,10 +94,26 @@ class ProductivityService:
             idle_seconds = segment_totals.get("IDLE", 0)
             working_seconds = active_seconds + idle_seconds
 
-            # Sleep/unknown-gap time is simply whatever was excluded from
-            # monitored (working) time -- no separate accounting model,
-            # just the SLEEP_GAP segments' own total.
-            sleep_seconds = segment_totals.get("SLEEP_GAP", 0)
+            # Sleep is ONLY ever the SLEEP_CONFIRMED total -- genuine
+            # sleep/power-state evidence, which the current agent does not
+            # send (see WorkSessionClassifier), so this is always 0 today.
+            # It is deliberately NOT the sum of every kind of unobserved
+            # time -- MONITORING_GAP and OFF_SESSION are reported
+            # separately below and must never be folded into "Sleep",
+            # which would silently overclaim confirmed sleep evidence that
+            # doesn't exist.
+            sleep_seconds = segment_totals.get("SLEEP_CONFIRMED", 0)
+
+            # Monitoring evidence disappeared for a bounded stretch inside
+            # an otherwise-confirmed session, cause unknown (real sleep,
+            # an agent hiccup, etc.) -- see WorkSessionClassifier.
+            monitoring_gap_seconds = segment_totals.get("MONITORING_GAP", 0)
+
+            # The system's best-available inference that this stretch is
+            # a boundary between two separate periods of engagement, not
+            # a confirmed fact -- see WorkSessionClassifier. Excluded from
+            # working_seconds/productivity exactly like the other two.
+            off_session_seconds = segment_totals.get("OFF_SESSION", 0)
 
             productivity = (
                 round(
@@ -245,6 +261,8 @@ class ProductivityService:
                     "idle_seconds": idle_seconds,
                     "active_seconds": active_seconds,
                     "sleep_seconds": sleep_seconds,
+                    "monitoring_gap_seconds": monitoring_gap_seconds,
+                    "off_session_seconds": off_session_seconds,
 
                     "productivity_percent": productivity,
 

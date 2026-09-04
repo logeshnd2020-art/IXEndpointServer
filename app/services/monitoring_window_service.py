@@ -125,8 +125,37 @@ class MonitoringWindowService:
         ]
 
         if not timestamps:
-            # No heartbeat evidence at all inside this window -- assume
-            # fully monitored rather than inventing a gap.
+            # No heartbeat evidence inside this window. Before assuming
+            # "fully monitored", check whether a gap that started BEFORE
+            # window_start is still in progress: if the most recent
+            # heartbeat strictly before window_start already implies a
+            # gap of at least gap_threshold_seconds by window_end, the
+            # whole window is correctly "not monitored" rather than
+            # defaulting to "fully monitored". Without this check, a
+            # live "today so far" query made during an in-progress
+            # overnight gap (before any of that morning's heartbeats
+            # exist yet) would wrongly report the elapsed span as
+            # monitored/Active -- this was the exact cause of a real
+            # false-Active incident on IXMAC007.
+            #
+            # A window with genuinely no heartbeat evidence at all --
+            # not even before window_start, e.g. pre-heartbeat-era
+            # sessions -- still falls through to the True fallback below,
+            # preserving the original, deliberate behavior for that case.
+            last_before = (
+                db.query(DeviceHeartbeat.timestamp)
+                .filter(
+                    DeviceHeartbeat.device_id == device_id,
+                    DeviceHeartbeat.timestamp < query_start,
+                )
+                .order_by(DeviceHeartbeat.timestamp.desc())
+                .first()
+            )
+            if last_before is not None:
+                last_before_ts = MonitoringWindowService._normalize_heartbeat_timestamp(last_before[0])
+                if (window_end - last_before_ts).total_seconds() > gap_threshold_seconds:
+                    return [(window_start, window_end, False)]
+
             return [(window_start, window_end, True)]
 
         segments: List[Segment] = []

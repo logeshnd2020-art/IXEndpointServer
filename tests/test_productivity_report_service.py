@@ -118,10 +118,13 @@ def test_report_idle_seconds_cannot_exceed_monitored_time_for_period(
     assert day1["idle_seconds"] < 14400
 
 
-def test_sleep_seconds_is_wall_clock_minus_working_when_gap_detected(db_session, device):
+def test_off_session_seconds_is_wall_clock_minus_working_when_gap_detected(db_session, device):
     # 4h (14400s) day-1 overlap window, but heartbeats only cover the
-    # first hour -- the rest must show up as sleep, not silently as 0.
-    # 20:00/21:00 IST == 14:30/15:30 UTC.
+    # first hour -- the rest must show up as off_session (no confirmed
+    # evidence exists to distinguish it from a session boundary), not
+    # silently as 0, and NOT as sleep_seconds (no sleep-evidence signal
+    # exists -- see WorkSessionClassifier). 20:00/21:00 IST == 14:30/15:30
+    # UTC.
     _make_cross_day_session(db_session, device, duration_seconds=None)
 
     db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
@@ -131,13 +134,16 @@ def test_sleep_seconds_is_wall_clock_minus_working_when_gap_detected(db_session,
     by_day = _reports_by_day(db_session)
 
     day1 = by_day["2026-09-01"]
-    assert day1["sleep_seconds"] > 0
-    assert day1["working_seconds"] + day1["sleep_seconds"] == 14400
+    assert day1["sleep_seconds"] == 0
+    assert day1["off_session_seconds"] > 0
+    assert day1["working_seconds"] + day1["off_session_seconds"] == 14400
 
 
-def test_sleep_seconds_from_heartbeat_gap_when_duration_unknown(db_session, device):
-    # No agent-reported duration_seconds -- Sleep must still be derivable
-    # from the device's own heartbeat gaps, not silently read as 0.
+def test_off_session_seconds_from_heartbeat_gap_when_duration_unknown(db_session, device):
+    # No agent-reported duration_seconds -- the unmonitored remainder must
+    # still be derivable from the device's own heartbeat gaps, not
+    # silently read as 0. Reported as off_session_seconds, not
+    # sleep_seconds -- no sleep-evidence signal exists (WorkSessionClassifier).
     #
     # Session login/logout AND device_heartbeat timestamps are both naive
     # datetimes treated as IST local time (matching the agent's
@@ -159,10 +165,11 @@ def test_sleep_seconds_from_heartbeat_gap_when_duration_unknown(db_session, devi
 
     day1 = by_day["2026-09-01"]
     # Day 1's 4h (14400s) overlap had heartbeat coverage for only the
-    # first hour -- the remaining ~3h must show up as sleep, not as
-    # working/idle time.
-    assert day1["sleep_seconds"] > 0
-    assert day1["working_seconds"] + day1["sleep_seconds"] == 14400
+    # first hour -- the remaining ~3h must show up as off_session, not as
+    # working/idle time, and not as sleep_seconds (no sleep evidence).
+    assert day1["sleep_seconds"] == 0
+    assert day1["off_session_seconds"] > 0
+    assert day1["working_seconds"] + day1["off_session_seconds"] == 14400
     assert day1["working_seconds"] < 14400
 
 
