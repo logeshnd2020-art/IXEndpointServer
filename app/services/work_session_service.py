@@ -59,13 +59,36 @@ class WorkSessionClassifier:
         displayed or treated as confirmed Sleep by any caller.
       - OFF_SESSION is the system's best available INFERENCE that a gap
         represents the boundary between two separate periods of
-        engagement -- never a confirmed fact. It is not determined from
-        clock time, and is not simply "gap > OFF_SESSION_CEILING_SECONDS"
-        in isolation: it also fires whenever the gap lacks confirmed
-        evidence on either flanking side, regardless of duration (this is
-        exactly what rejects a short, isolated heartbeat/application
-        stutter -- e.g. the real DarkWake pattern on IXMAC007 -- from ever
-        being treated as a real interruption inside an ongoing session).
+        engagement -- never a confirmed fact, and never determined from
+        clock time. It requires BOTH (a) at least one confirmed anchor --
+        a genuine monitored run on at least one flanking side, so there is
+        *something* to measure elapsed time from -- AND (b) that elapsed
+        duration exceeding OFF_SESSION_CEILING_SECONDS. A gap with NO
+        confirmed anchor on either side is never OFF_SESSION regardless of
+        its own raw duration: with zero anchors there is nothing to
+        support the claim "this is a boundary between two periods of
+        engagement" (there might not even be a second period yet -- e.g.
+        a session that has produced no confirmed heartbeat at all). Such a
+        gap is MONITORING_GAP -- honestly "cause unknown, not yet
+        resolved" -- never a confident inference. This also correctly
+        covers a short interruption sitting right at the edge of the
+        padded evaluation window (or at a session's own true start/end),
+        where a missing flanking side reflects the evaluation boundary,
+        not evidence of an actual session boundary -- a missing side alone
+        must never manufacture an OFF_SESSION verdict.
+
+        A gap WITH at least one confirmed anchor but still short (within
+        the ceiling) is MONITORING_GAP, exactly as if both sides were
+        confirmed -- this covers the live, still-unresolved case (e.g.
+        querying "today so far" a few minutes into a gap that hasn't
+        resolved yet): too early to call it a boundary. Once such a gap's
+        elapsed duration (measured from its one known anchor) exceeds the
+        ceiling, it becomes OFF_SESSION even before the other side is
+        known -- this is what correctly classifies the real IXMAC007
+        00:00-00:16 case when queried live, mid-gap, hours before that
+        morning's resumption exists: the evening's confirmed run is a
+        real anchor, and by 00:16 the elapsed gap already dwarfs the
+        ceiling, independent of whether "after" is known yet.
 
     A monitored run shorter than SUSTAINED_RUN_SECONDS is "unconfirmed" --
     a stutter, not reliable evidence of genuine observation -- and is
@@ -142,13 +165,24 @@ class WorkSessionClassifier:
             after = merged[idx + 1] if idx < len(merged) - 1 and not merged[idx + 1]["is_gap_like"] else None
             duration_seconds = (seg["end"] - seg["start"]).total_seconds()
 
+            has_any_confirmed_anchor = before is not None or after is not None
+
             if WorkSessionClassifier.has_confirmed_sleep_evidence(seg["start"], seg["end"]):
                 gap_type = "SLEEP_CONFIRMED"
-            elif before is None or after is None:
-                gap_type = "OFF_SESSION"
-            elif duration_seconds > OFF_SESSION_CEILING_SECONDS:
+            elif has_any_confirmed_anchor and duration_seconds > OFF_SESSION_CEILING_SECONDS:
+                # At least one side is confirmed real engagement, and the
+                # elapsed duration measured from it already exceeds the
+                # ceiling -- OFF_SESSION, even if the OTHER side isn't
+                # known yet (still-unresolved live gap) or was itself
+                # outside the padded window (edge of evaluated evidence).
                 gap_type = "OFF_SESSION"
             else:
+                # Either no confirmed anchor exists at all (nothing to
+                # measure a boundary claim against -- e.g. a session with
+                # no confirmed heartbeat yet), or a confirmed anchor
+                # exists but the elapsed duration is still within the
+                # ceiling (too short/too early to call it a boundary,
+                # regardless of which side, or how many sides, are known).
                 gap_type = "MONITORING_GAP"
 
             result.append({"start": seg["start"], "end": seg["end"], "monitored": False, "gap_type": gap_type})

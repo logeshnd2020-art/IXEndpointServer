@@ -253,6 +253,24 @@ def test_ixmac007_00_00_to_00_16_false_active_regression(db_session, device):
     while cursor <= datetime(2026, 9, 3, 18, 46, 39):
         db_session.add(_heartbeat(device, cursor))
         cursor += timedelta(seconds=30)
+
+    # Genuine resumption the next morning, matching the real incident's
+    # timestamp -- this gives the classifier a confirmed anchor on BOTH
+    # sides of the gap, exactly like the real production data once
+    # queried after the fact (not live, mid-gap). Without this, the
+    # 2-hour padded evaluation window for date=2026-09-04 (which only
+    # reaches back to 2026-09-03 22:00) would see NO confirmed evidence
+    # on either side at all (18:46:39 is outside that padding), which
+    # must correctly be MONITORING_GAP, not OFF_SESSION -- see
+    # test_gap_with_no_confirmed_anchor_at_all_is_never_off_session_regardless_of_duration.
+    # This test specifically reproduces the real, fully-resolved
+    # incident (queried well after resumption exists), where "after" IS
+    # a real confirmed anchor even though "before" falls outside the
+    # padding -- exactly as verified live against the production database.
+    cursor = datetime(2026, 9, 4, 10, 33, 11)
+    while cursor <= datetime(2026, 9, 4, 10, 40, 0):
+        db_session.add(_heartbeat(device, cursor))
+        cursor += timedelta(seconds=30)
     db_session.commit()
 
     from app.models.device import Device as DeviceModel

@@ -60,10 +60,16 @@ def test_unconfirmed_monitored_run_is_absorbed_into_surrounding_gap():
     result = WorkSessionClassifier.classify(raw)
 
     # The stutter must not appear as its own monitored segment; both gaps
-    # (and the stutter between them) coalesce into one OFF_SESSION span.
+    # (and the stutter between them) coalesce into one span. With ZERO
+    # confirmed anchor anywhere in this raw_segments (the stutter is
+    # unconfirmed and gets absorbed, never counting as an anchor), there
+    # is nothing to support an inferred "session boundary" claim -- this
+    # must be MONITORING_GAP, never OFF_SESSION, regardless of the
+    # combined span's own raw duration (10h here). A missing/absorbed
+    # side alone must never manufacture an OFF_SESSION verdict.
     assert len(result) == 1
     assert result[0]["monitored"] is False
-    assert result[0]["gap_type"] == "OFF_SESSION"
+    assert result[0]["gap_type"] == "MONITORING_GAP"
     assert result[0]["start"] == gap_start
     assert result[0]["end"] == gap2_end
 
@@ -105,11 +111,15 @@ def test_gap_confirmed_both_sides_exceeding_ceiling_is_off_session():
     assert gap["gap_type"] == "OFF_SESSION"
 
 
-def test_gap_missing_evidence_on_one_side_is_off_session_regardless_of_duration():
+def test_short_gap_with_one_side_missing_is_monitoring_gap_not_off_session():
     """
-    Evidence quality, not duration, is the primary gate: even a SHORT gap
-    must be OFF_SESSION if it isn't flanked by confirmed evidence on both
-    sides -- duration alone can never override a missing-evidence verdict.
+    A missing flanking side does NOT by itself prove a session boundary
+    occurred. A short gap sitting at the edge of the evaluated evidence
+    (here: 'before' is confirmed, 'after' is only an unconfirmed stutter,
+    absorbed rather than counted) must stay MONITORING_GAP as long as its
+    own duration is still within the ceiling -- exactly the same as if
+    both sides had been confirmed. Duration, not evidence-sparsity alone,
+    is what distinguishes a short interruption from an inferred boundary.
     """
     before_start = utc(2026, 1, 1, 9, 0, 0)
     before_end = before_start + timedelta(seconds=SUSTAINED_RUN_SECONDS + 60)
@@ -127,7 +137,62 @@ def test_gap_missing_evidence_on_one_side_is_off_session_regardless_of_duration(
     assert len(result) == 2
     assert result[0]["monitored"] is True
     assert result[1]["monitored"] is False
-    assert result[1]["gap_type"] == "OFF_SESSION"
+    assert result[1]["gap_type"] == "MONITORING_GAP"
+    assert result[1]["gap_type"] != "OFF_SESSION"
+
+
+def test_gap_with_one_confirmed_anchor_and_long_duration_is_off_session():
+    """
+    The complementary case: ONE confirmed anchor is sufficient for
+    OFF_SESSION once the elapsed duration (measured from that anchor)
+    already exceeds the ceiling -- the other side need not be known yet.
+    This is exactly the shape of a LIVE query made mid-gap, hours before
+    the gap has resolved (the real IXMAC007 00:00-00:16 incident, queried
+    before that morning's resumption existed): 'before' is a real,
+    confirmed evening run; 'after' doesn't exist yet because no time has
+    passed there. The elapsed gap already dwarfs the ceiling regardless.
+    """
+    before_start = utc(2026, 1, 1, 18, 0, 0)
+    before_end = before_start + timedelta(seconds=SUSTAINED_RUN_SECONDS + 60)
+    # Gap runs to the edge of the evaluated window -- nothing after it yet.
+    gap_end = before_end + timedelta(seconds=OFF_SESSION_CEILING_SECONDS + 1)
+
+    raw = [
+        _run(before_start, before_end, True),
+        _run(before_end, gap_end, False),
+        # No third segment -- "after" is genuinely unknown, not just
+        # unconfirmed; this is the live/still-open edge of the window.
+    ]
+
+    result = WorkSessionClassifier.classify(raw)
+    gap = next(s for s in result if not s["monitored"])
+
+    assert gap["gap_type"] == "OFF_SESSION"
+
+
+def test_gap_with_no_confirmed_anchor_at_all_is_never_off_session_regardless_of_duration():
+    """
+    The core fix for the reviewed concern: a gap with NO confirmed anchor
+    on EITHER side -- not even one -- must never become OFF_SESSION no
+    matter how long its own raw span is. With zero anchors there is
+    nothing to support the claim "this is a boundary between two periods
+    of engagement" (there might not even be a second period). Even a
+    10-hour span with zero confirmed evidence anywhere stays
+    MONITORING_GAP -- honestly "cause unknown, unresolved", never a
+    confident inference.
+    """
+    gap_start = utc(2026, 1, 1, 0, 0, 0)
+    gap_end = gap_start + timedelta(hours=10)  # far beyond the ceiling
+
+    raw = [
+        _run(gap_start, gap_end, False),
+    ]
+
+    result = WorkSessionClassifier.classify(raw)
+
+    assert len(result) == 1
+    assert result[0]["gap_type"] == "MONITORING_GAP"
+    assert result[0]["gap_type"] != "OFF_SESSION"
 
 
 def test_no_clock_hour_dependency():

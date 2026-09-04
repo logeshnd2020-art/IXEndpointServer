@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.models.session import Session
 from app.models.idle import IdleEvent
@@ -119,16 +119,19 @@ def test_report_idle_seconds_cannot_exceed_monitored_time_for_period(
 
 
 def test_off_session_seconds_is_wall_clock_minus_working_when_gap_detected(db_session, device):
-    # 4h (14400s) day-1 overlap window, but heartbeats only cover the
-    # first hour -- the rest must show up as off_session (no confirmed
-    # evidence exists to distinguish it from a session boundary), not
-    # silently as 0, and NOT as sleep_seconds (no sleep-evidence signal
-    # exists -- see WorkSessionClassifier). 20:00/21:00 IST == 14:30/15:30
+    # 4h (14400s) day-1 overlap window. A genuinely confirmed monitored
+    # island (>= SUSTAINED_RUN_SECONDS) at the very start gives the
+    # classifier a real anchor; the rest of the window is then a long,
+    # one-sided (unresolved) gap that must show up as off_session -- a
+    # gap needs at least ONE confirmed anchor to ever become off_session
+    # (see WorkSessionClassifier), never silently as 0, and NOT as
+    # sleep_seconds (no sleep-evidence signal exists). 20:00 IST == 14:30
     # UTC.
     _make_cross_day_session(db_session, device, duration_seconds=None)
 
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 21, 0, 0)))
+    island_start = datetime(2026, 9, 1, 20, 0, 0)
+    for i in range(4):
+        db_session.add(_heartbeat(device, island_start + timedelta(minutes=i)))
     db_session.commit()
 
     by_day = _reports_by_day(db_session)
@@ -154,11 +157,14 @@ def test_off_session_seconds_from_heartbeat_gap_when_duration_unknown(db_session
     # that same 14:30 UTC instant.
     session = _make_cross_day_session(db_session, device, duration_seconds=None)
 
-    # Heartbeats only during the first hour of day 1's 4h UTC overlap
-    # (14:30-15:30 UTC == 20:00-21:00 IST), then nothing for the rest of
-    # that window -- a large gap inside day 1's window.
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 20, 0, 0)))
-    db_session.add(_heartbeat(device, datetime(2026, 9, 1, 21, 0, 0)))
+    # A genuinely confirmed monitored island (>= SUSTAINED_RUN_SECONDS) at
+    # the very start of day 1's 4h UTC overlap (14:30 UTC == 20:00 IST)
+    # gives the classifier a real anchor; nothing else for the rest of
+    # that window -- a long, one-sided gap needing that anchor to become
+    # off_session (see WorkSessionClassifier).
+    island_start = datetime(2026, 9, 1, 20, 0, 0)
+    for i in range(4):
+        db_session.add(_heartbeat(device, island_start + timedelta(minutes=i)))
     db_session.commit()
 
     by_day = _reports_by_day(db_session)
