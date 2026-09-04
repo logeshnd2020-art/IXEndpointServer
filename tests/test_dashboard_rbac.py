@@ -1,4 +1,4 @@
-from tests.conftest import auth_headers
+from tests.conftest import TEST_MONITOR_PASSWORD, auth_headers
 
 
 def test_anonymous_request_is_unauthorized(client):
@@ -7,7 +7,7 @@ def test_anonymous_request_is_unauthorized(client):
 
 
 def test_monitor_can_login_and_view_dashboard(client, monitor_user):
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
 
     response = client.get("/api/dashboard/summary", headers=headers)
     assert response.status_code == 200
@@ -24,14 +24,14 @@ def test_monitor_can_login_and_view_dashboard(client, monitor_user):
 def test_login_response_includes_role(client, monitor_user):
     response = client.post(
         "/api/auth/login",
-        json={"username_or_email": "monitor", "password": "REDACTED-ROTATED-CREDENTIAL"},
+        json={"username_or_email": "monitor", "password": TEST_MONITOR_PASSWORD},
     )
     assert response.status_code == 200
     assert response.json()["user"]["role"] == "MONITOR"
 
 
 def test_monitor_can_view_device_detail_endpoints(client, monitor_user, device):
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
 
     response = client.get(f"/api/device/{device.id}", headers=headers)
     assert response.status_code == 200
@@ -46,7 +46,7 @@ def test_monitor_can_view_device_detail_endpoints(client, monitor_user, device):
 
 
 def test_monitor_cannot_create_device(client, monitor_user):
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
 
     response = client.post(
         "/api/devices",
@@ -62,7 +62,7 @@ def test_monitor_cannot_create_device(client, monitor_user):
 
 
 def test_monitor_cannot_update_or_delete_device(client, monitor_user, device):
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
 
     response = client.put(
         f"/api/devices/{device.id}",
@@ -76,7 +76,7 @@ def test_monitor_cannot_update_or_delete_device(client, monitor_user, device):
 
 
 def test_monitor_cannot_manage_enrollment_keys(client, monitor_user):
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
 
     response = client.post(
         "/api/admin/enrollment-keys/",

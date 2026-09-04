@@ -7,8 +7,14 @@ have been run first so the MONITOR role exists.
 
 The plaintext password is only ever used locally to compute a bcrypt hash
 via app.core.security.get_password_hash -- it is never written to the
-database, logged, or stored anywhere in plaintext.
+database, logged, or stored anywhere in plaintext. It must be supplied via
+the MONITOR_USER_PASSWORD environment variable (same convention as
+SECRET_KEY/DB_PASSWORD in app.core.config) rather than hardcoded here, so
+no real credential ever lives in source control.
 """
+import os
+import sys
+
 from sqlalchemy import or_
 
 from app.core.database import SessionLocal
@@ -20,8 +26,16 @@ from app.repositories.role_repository import RoleRepository
 def main() -> None:
     username = "monitor"
     email = "monitor@intellectyx.com"
-    password = "REDACTED-ROTATED-CREDENTIAL"
+    password = os.environ.get("MONITOR_USER_PASSWORD")
     role_name = "MONITOR"
+
+    if not password:
+        print(
+            "MONITOR_USER_PASSWORD environment variable is not set -- "
+            "refusing to create/update the monitor account without an "
+            "explicit password. Set it and re-run."
+        )
+        sys.exit(1)
 
     db = SessionLocal()
     try:

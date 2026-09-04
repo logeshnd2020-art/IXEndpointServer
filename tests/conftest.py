@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 
 import pytest
@@ -118,12 +119,20 @@ def _make_user(db_session, *, username, password, role_name, email=None):
     return user
 
 
+# Overridable via env for local/CI use, but the fallback is a deliberately
+# obvious test-only string -- never the real monitor account's password --
+# so it can't be mistaken for or reused as a production credential. Tests
+# that log in as "monitor" via auth_headers() should import this constant
+# rather than hardcoding a password literal.
+TEST_MONITOR_PASSWORD = os.environ.get("TEST_MONITOR_PASSWORD", "test-only-monitor-fixture-password")
+
+
 @pytest.fixture()
 def monitor_user(db_session):
     return _make_user(
         db_session,
         username="monitor",
-        password="REDACTED-ROTATED-CREDENTIAL",
+        password=TEST_MONITOR_PASSWORD,
         role_name="MONITOR",
     )
 

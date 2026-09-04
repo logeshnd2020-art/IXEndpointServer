@@ -2,7 +2,7 @@ from app.schemas.heartbeat import AgentHeartbeatRequest
 from app.services.agent_service import AgentService
 from app.repositories.device_heartbeat_repository import DeviceHeartbeatRepository
 
-from tests.conftest import auth_headers
+from tests.conftest import TEST_MONITOR_PASSWORD, auth_headers
 
 
 def _heartbeat_request(**overrides):
@@ -53,7 +53,7 @@ def test_health_api_exposes_mac_address_field(client, monitor_user, db_session, 
     request = _heartbeat_request(mac_address="AC:DE:48:00:11:22")
     AgentService.heartbeat(db_session, request, device)
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get(f"/api/device/{device.id}/health", headers=headers)
 
     assert response.status_code == 200
@@ -66,7 +66,7 @@ def test_health_api_mac_address_is_none_when_agent_has_not_reported_one(
     request = _heartbeat_request()  # no mac_address, matching real-world data today
     AgentService.heartbeat(db_session, request, device)
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get(f"/api/device/{device.id}/health", headers=headers)
 
     assert response.status_code == 200

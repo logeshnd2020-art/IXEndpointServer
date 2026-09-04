@@ -91,7 +91,7 @@ nullable=True)
                 "is_registered",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("0"),
+                server_default=sa.false(),
             )
         )
 

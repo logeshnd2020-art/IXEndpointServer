@@ -1,7 +1,7 @@
 from app.models.application import Application
 from app.models.session import Session
 
-from tests.conftest import auth_headers, utc
+from tests.conftest import TEST_MONITOR_PASSWORD, auth_headers, utc
 
 
 def _make_active_session(db_session, device, local_session_id=1):
@@ -40,7 +40,7 @@ def test_current_application_returns_most_recent_even_if_closed(
     db_session.add_all([older, newest])
     db_session.commit()
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get("/api/dashboard/current-applications", headers=headers)
 
     assert response.status_code == 200
@@ -64,7 +64,7 @@ def test_current_application_marks_genuinely_open_app(
     db_session.add(app)
     db_session.commit()
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get("/api/dashboard/current-applications", headers=headers)
 
     assert response.status_code == 200
@@ -78,7 +78,7 @@ def test_current_application_empty_state_when_no_application_rows(
 ):
     _make_active_session(db_session, device)
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get("/api/dashboard/current-applications", headers=headers)
 
     assert response.status_code == 200

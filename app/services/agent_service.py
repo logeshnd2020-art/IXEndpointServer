@@ -152,12 +152,6 @@ class AgentService:
         device: Device,
     ) -> AgentHeartbeatResponse:
 
-        print("===== HEARTBEAT DEBUG =====")
-        print("REQUEST NETWORK:", repr(request.network_name))
-        print("REQUEST IP:", repr(request.ip_address))
-        print("REQUEST HOSTNAME:", repr(request.hostname))
-        print("===========================")
-
         now = datetime.now(timezone.utc)
 
         device.last_seen = now

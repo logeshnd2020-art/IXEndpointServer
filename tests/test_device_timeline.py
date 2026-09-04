@@ -2,7 +2,7 @@ from datetime import datetime
 
 from app.models.session import Session
 
-from tests.conftest import auth_headers
+from tests.conftest import TEST_MONITOR_PASSWORD, auth_headers
 
 
 def _make_session(db_session, device, login, logout, local_session_id=1, status="LOGOUT"):
@@ -33,7 +33,7 @@ def test_day_timeline_fills_gaps_before_and_after_session_as_no_session(
         logout=datetime(2026, 9, 1, 14, 0, 0),
     )
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get(
         "/api/device/%s/timeline?date=2026-09-01" % device.id, headers=headers
     )
@@ -72,7 +72,7 @@ def test_day_timeline_handles_multiple_sessions_same_day(client, monitor_user, d
         local_session_id=2,
     )
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get(
         f"/api/device/{device.id}/timeline?date=2026-09-01", headers=headers
     )
@@ -84,7 +84,7 @@ def test_day_timeline_handles_multiple_sessions_same_day(client, monitor_user, d
 
 
 def test_day_timeline_invalid_date_returns_400(client, monitor_user, device):
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get(
         f"/api/device/{device.id}/timeline?date=not-a-date", headers=headers
     )
@@ -97,6 +97,6 @@ def test_day_timeline_requires_auth(client, device):
 
 
 def test_day_timeline_unknown_device_404(client, monitor_user):
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get("/api/device/999999/timeline?date=2026-09-01", headers=headers)
     assert response.status_code == 404

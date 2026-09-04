@@ -1,6 +1,6 @@
 from app.models.device_heartbeat import DeviceHeartbeat
 
-from tests.conftest import auth_headers
+from tests.conftest import TEST_MONITOR_PASSWORD, auth_headers
 
 
 def _make_heartbeat(db_session, device, uptime_seconds):
@@ -37,7 +37,7 @@ def test_health_uptime_seconds_is_the_agent_reported_value_unmodified(
     reported_uptime = (3 * 86400) + (7 * 3600) + (24 * 60)
     _make_heartbeat(db_session, device, uptime_seconds=reported_uptime)
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get(f"/api/device/{device.id}/health", headers=headers)
 
     assert response.status_code == 200
@@ -55,7 +55,7 @@ def test_health_response_never_fabricates_a_mac_address(
     # round-trip case where a mac_address IS reported.)
     _make_heartbeat(db_session, device, uptime_seconds=100)
 
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
     response = client.get(f"/api/device/{device.id}/health", headers=headers)
 
     assert response.status_code == 200
@@ -73,7 +73,7 @@ def test_device_health_endpoints_still_work_for_mac_health_tab(
     client, monitor_user, db_session, device
 ):
     _make_heartbeat(db_session, device, uptime_seconds=3600)
-    headers = auth_headers(client, "monitor", "REDACTED-ROTATED-CREDENTIAL")
+    headers = auth_headers(client, "monitor", TEST_MONITOR_PASSWORD)
 
     for path in (
         f"/api/device/{device.id}",
