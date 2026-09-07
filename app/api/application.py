@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_device
 from app.core.database import get_db
+from app.core.legacy_endpoint_metrics import record_legacy_hit
 from app.schemas.application import (
     ApplicationStartRequest,
     ApplicationStopRequest,
@@ -25,6 +26,7 @@ def start(
     current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
+    record_legacy_hit("POST /api/application/start")
 
     app = ApplicationService.start(
         db,
@@ -44,6 +46,7 @@ def stop(
     current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
+    record_legacy_hit("POST /api/application/stop")
 
     ApplicationService.stop(
         db,

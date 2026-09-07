@@ -11,3 +11,5 @@ from app.models.permission import Permission
 from app.models.role_permission import RolePermission
 from app.models.user import User
 from app.models.installed_application import InstalledApplication
+from app.models.server_lifecycle_event import ServerLifecycleEvent
+from app.models.agent_lifecycle_event import AgentLifecycleEvent

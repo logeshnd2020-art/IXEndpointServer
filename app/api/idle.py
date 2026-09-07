@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_device
 from app.core.database import get_db
+from app.core.legacy_endpoint_metrics import record_legacy_hit
 from app.schemas.idle import (
     IdleStartRequest,
     IdleEndRequest,
@@ -25,6 +26,7 @@ def start(
     current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
+    record_legacy_hit("POST /api/idle/start")
 
     idle = IdleService.start(
         db,
@@ -43,6 +45,7 @@ def end(
     current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
+    record_legacy_hit("POST /api/idle/end")
 
     IdleService.end(
         db,

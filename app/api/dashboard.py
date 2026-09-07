@@ -19,6 +19,7 @@ from app.schemas.current_application import CurrentApplicationResponse
 from app.schemas.productivity import ProductivityResponse
 from app.services.productivity_service import ProductivityService
 from app.services.productivity_report_service import ProductivityReportService
+from app.services.device_liveness_service import online_status_label
 
 router = APIRouter(
     prefix="/api/dashboard",
@@ -74,7 +75,11 @@ def live_devices(
                 hostname=device.hostname,
                 serial_number=device.serial_number,
                 username=session.username if session else "",
-                status="ONLINE" if device.is_online else "OFFLINE",
+                # Phase 3, Item 3 -- computed from last_seen staleness at
+                # read time rather than the raw (never-reset) is_online
+                # flag. Liveness/visibility only -- see
+                # device_liveness_service's module docstring.
+                status=online_status_label(device),
                 ip_address=device.ip_address or "",
                 last_seen=device.last_seen,
             )

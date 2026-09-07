@@ -20,6 +20,12 @@ from app.schemas.agent_idle import (
 )
 from app.services.agent_idle_service import AgentIdleService
 
+from app.schemas.agent_lifecycle import (
+    AgentLifecycleSyncRequest,
+    AgentLifecycleSyncResponse,
+)
+from app.services.agent_lifecycle_service import AgentLifecycleService
+
 from app.schemas.agent_application import (
     AgentApplicationSyncRequest,
     AgentApplicationSyncResponse,
@@ -234,6 +240,40 @@ def sync_idle(
 ):
     try:
         return AgentIdleService.sync(
+            db=db,
+            request=request,
+            device=current_device,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+
+@router.post(
+    "/lifecycle",
+    response_model=AgentLifecycleSyncResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"description": "Invalid lifecycle sync request (e.g. batch too large)"},
+        401: {"description": "Invalid device token or authentication failed"},
+        422: {"description": "Validation error"},
+    },
+)
+def sync_lifecycle(
+    request: AgentLifecycleSyncRequest,
+    current_device=Depends(get_current_device),
+    db: Session = Depends(get_db),
+):
+    """
+    7.8.0 evidence batch upload. Idempotent: replaying an already-accepted
+    event_uid is a no-op, never a duplicate row -- see
+    AgentLifecycleService.sync and the (device_id, event_uid) unique
+    constraint on AgentLifecycleEvent.
+    """
+    try:
+        return AgentLifecycleService.sync(
             db=db,
             request=request,
             device=current_device,

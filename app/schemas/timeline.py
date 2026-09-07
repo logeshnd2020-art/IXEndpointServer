@@ -31,6 +31,15 @@ class TimelineSegment(BaseModel):
     # mean a session *was* open but not observed.
     type: Literal["ACTIVE", "IDLE", "SLEEP_CONFIRMED", "MONITORING_GAP", "OFF_SESSION", "NO_SESSION"]
     duration_seconds: int
+    # 7.8.0 evidence groundwork (Phase 3 Item 6, completed): an optional,
+    # additive explanation for a gap-type segment, populated only from
+    # verified client/server evidence (see app.services.agent_evidence_service).
+    # Never set for ACTIVE/IDLE/NO_SESSION. Never changes `type` -- this is
+    # annotation on top of the existing, unmodified classification, never a
+    # replacement for it. Absent evidence means this stays None, exactly as
+    # every gap already behaved before this field existed -- MONITORING_GAP
+    # remains the honest fallback.
+    reason: Optional[str] = None
 
 
 class TimelineResponse(BaseModel):

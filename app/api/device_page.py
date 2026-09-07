@@ -21,6 +21,8 @@ from app.schemas.application_timeline import (
     ApplicationUsageDetail,
 )
 from app.services.timeline_service import TimelineService
+from app.services.device_liveness_service import online_status_label
+from app.services.agent_evidence_service import attach_reason
 
 # Matches the local-timezone convention already used by ProductivityService
 # and ProductivityReportService for interpreting naive DB timestamps and
@@ -67,7 +69,11 @@ def device_detail(
         device_id=device.id,
         hostname=device.hostname,
         username=session.username if session else device.username,
-        status="ONLINE" if device.is_online else "OFFLINE",
+        # Phase 3, Item 3 -- computed from last_seen staleness at read
+        # time rather than the raw (never-reset) is_online flag.
+        # Liveness/visibility only -- see device_liveness_service's
+        # module docstring.
+        status=online_status_label(device),
         ip_address=device.ip_address,
         last_seen=device.last_seen,
         serial_number=device.serial_number,
@@ -201,6 +207,19 @@ def _build_day_timeline(db: Session, device: Device, date_str: str) -> TimelineR
 
             if not session_segments:
                 continue
+
+            # 7.8.0 evidence groundwork -- annotate gap-type segments with
+            # `reason` from verified agent/server evidence, if any exists.
+            # Deliberately done HERE, once per session, rather than inside
+            # TimelineService.build() itself: build() is the single
+            # canonical interval representation shared by
+            # ProductivityService/ProductivityReportService/application
+            # attribution as well, none of which need or read `reason` --
+            # keeping this lookup out of build() means those call sites
+            # pay zero extra query cost, and `type`/duration accounting
+            # stays provably untouched everywhere except this one
+            # dashboard-facing timeline endpoint.
+            session_segments = attach_reason(session_segments, device.id, db)
 
             seg_start = session_segments[0]["start"]
             seg_end = session_segments[-1]["end"]

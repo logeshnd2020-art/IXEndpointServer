@@ -74,6 +74,56 @@ const IXTimeline = (() => {
         return TYPE_LABEL[type] || type;
     }
 
+    // Management-facing status resolution (7.8.0 evidence layer).
+    //
+    // Maps the server's optional per-segment `reason` (populated only
+    // when verified agent/server evidence exists -- see
+    // app.services.agent_evidence_service on the backend) to the actual
+    // specific status the dashboard must display, per the approved
+    // specification. Falls back to the existing, unmodified `typeLabel`
+    // whenever no supported reason is present -- this is a PRESENTATION
+    // decision only: `seg.type`/`seg.duration_seconds` (the fields the
+    // canonical accounting invariant is built from) are never read for
+    // any purpose beyond falling back to typeLabel(seg.type), and are
+    // never modified. A segment with a supported reason must never
+    // render as "Monitoring Gap" -- that is the specific defect this
+    // resolution exists to fix.
+    //
+    // Keys are the exact `reason` strings app.services.agent_evidence_service
+    // currently emits (RESTART, RESTART_UNPLANNED, SHUTDOWN,
+    // AGENT_STOPPED, AGENT_RESTART, UNEXPECTED_AGENT_RECOVERY,
+    // NETWORK_UNAVAILABLE, SERVER_UNAVAILABLE,
+    // SHUTDOWN_OR_RESTART_PENDING), plus two accepted-but-not-yet-emitted
+    // aliases (MONITORING_INTERRUPTED, UNKNOWN) reserved for a possible
+    // future, more granular server-side distinction between "some
+    // evidence exists but doesn't resolve to a named state" and "zero
+    // evidence at all" -- today both cases simply fall through to the
+    // existing Monitoring Gap fallback, unchanged.
+    const REASON_STATUS_LABEL = {
+        SLEEP: "Sleep",
+        RESTART: "Confirmed Restart",
+        RESTART_UNPLANNED: "Confirmed Restart",
+        SHUTDOWN: "Confirmed Shutdown",
+        AGENT_STOPPED: "Agent Stopped",
+        AGENT_RESTART: "Agent Restarted",
+        UNEXPECTED_AGENT_RECOVERY: "Agent Restarted",
+        NETWORK_UNAVAILABLE: "Network Unavailable",
+        SERVER_UNAVAILABLE: "Server Unavailable",
+        SHUTDOWN_OR_RESTART_PENDING: "Monitoring Interrupted",
+        MONITORING_INTERRUPTED: "Monitoring Interrupted",
+        UNKNOWN: "Unknown",
+    };
+
+    function resolveStatus(seg) {
+        if (seg && seg.reason && REASON_STATUS_LABEL[seg.reason]) {
+            return REASON_STATUS_LABEL[seg.reason];
+        }
+        // No supported reason (or type === NO_SESSION, which never
+        // carries a reason) -- existing Monitoring Gap / No Session /
+        // Active / Idle / Off Session labeling, completely unchanged.
+        return typeLabel(seg.type);
+    }
+
     function render(container, timelineData, options = {}) {
         container.innerHTML = "";
 
@@ -119,7 +169,7 @@ const IXTimeline = (() => {
                 el.style.left = `${leftPct}%`;
                 el.style.width = `${widthPct}%`;
                 el.dataset.segIndex = index;
-                el.title = `${typeLabel(seg.type)} (${IXFormat.duration(seg.duration_seconds)}): `
+                el.title = `${resolveStatus(seg)} (${IXFormat.duration(seg.duration_seconds)}): `
                     + `${IXFormat.time(seg.start)} - ${IXFormat.time(seg.end)}`;
 
                 if (options.onSegmentClick) {
@@ -141,5 +191,5 @@ const IXTimeline = (() => {
         container.appendChild(legend);
     }
 
-    return { render, mergeSegments, typeLabel };
+    return { render, mergeSegments, typeLabel, resolveStatus };
 })();

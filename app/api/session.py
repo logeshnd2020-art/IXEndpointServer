@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_device
 from app.core.database import get_db
+from app.core.legacy_endpoint_metrics import record_legacy_hit
 from app.schemas.session import (
     LoginRequest,
     LogoutRequest,
@@ -26,6 +27,8 @@ def login(
     current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
+    record_legacy_hit("POST /api/session/login")
+
     session = SessionService.login(
         db,
         request.serial_number,
@@ -48,6 +51,8 @@ def logout(
     current_device=Depends(get_current_device),
     db: Session = Depends(get_db),
 ):
+    record_legacy_hit("POST /api/session/logout")
+
     SessionService.logout(
         db,
         request.serial_number,

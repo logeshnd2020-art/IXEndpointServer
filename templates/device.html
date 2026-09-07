@@ -573,7 +573,7 @@
                     <td>${IXFormat.time(seg.start)}</td>
                     <td>${IXFormat.time(seg.end)}</td>
                     <td class="ix-activity-status-cell">
-                        <span class="ix-legend-swatch ix-timeline-seg-${seg.type}"></span>${IXTimeline.typeLabel(seg.type)}
+                        <span class="ix-legend-swatch ix-timeline-seg-${seg.type}"></span>${IXTimeline.resolveStatus(seg)}
                     </td>
                     <td class="text-end">${IXFormat.durationShort(seg.duration_seconds)}</td>
                 </tr>
