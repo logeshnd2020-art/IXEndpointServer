@@ -12,8 +12,14 @@ from app.models.device import Device
 from app.models.session import Session as UserSession
 from app.models.installed_application import InstalledApplication
 from app.models.device_heartbeat import DeviceHeartbeat
+from app.models.application import Application
 from app.schemas.device_detail import DeviceMonitorDetailResponse, InstalledApplicationDetail
 from app.schemas.timeline import TimelineResponse
+from app.schemas.application_timeline import (
+    ApplicationDrilldownResponse,
+    ApplicationInterval,
+    ApplicationUsageDetail,
+)
 from app.services.timeline_service import TimelineService
 
 # Matches the local-timezone convention already used by ProductivityService
@@ -152,8 +158,10 @@ def _build_day_timeline(db: Session, device: Device, date_str: str) -> TimelineR
     Builds a contiguous 24h (or up-to-now, for today) timeline for one
     LOCAL calendar day, across every session that overlaps it. Stretches
     of the day with no session open at all are reported as NO_SESSION --
-    distinct from SLEEP_GAP, which means a session was open but not
-    observed. Never fills time beyond "now" for the current day.
+    distinct from SLEEP_CONFIRMED/MONITORING_GAP/OFF_SESSION, all of which
+    mean a session was open but not observed (see WorkSessionClassifier
+    for how those three are distinguished). Never fills time beyond "now"
+    for the current day.
     """
     try:
         day = date_cls.fromisoformat(date_str)
@@ -305,3 +313,177 @@ def device_timeline(
         window_end=window_end,
         segments=segments,
     )
+
+
+def _normalize_application_timestamp(dt):
+    """
+    applications.start_time/end_time are naive endpoint-local (Asia/Kolkata)
+    wall-clock time -- the same convention sessions/idle_events use (see
+    TimelineService.CLIENT_LOCAL_TZ) -- not naive UTC. Mirrors
+    TimelineService._normalize_local() exactly; duplicated here rather than
+    imported since it's a private helper on that class.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _build_day_application_summary(db: Session, device: Device, date_str: str) -> ApplicationDrilldownResponse:
+    """
+    Per-application attribution for one LOCAL calendar day, built strictly
+    as a downstream layer over the same canonical segments Activity
+    Details/Timeline already use for this device/day -- never an
+    independent Active/Idle classification. An application record's
+    overlap with any segment that is not ACTIVE or IDLE (SLEEP_CONFIRMED,
+    MONITORING_GAP, OFF_SESSION, NO_SESSION) contributes nothing: no
+    seconds, no interval row. This is what prevents a DarkWake-generated
+    application record from ever appearing as Active time, without this
+    function ever needing to know what DarkWake is -- it only ever sees
+    already-classified segments and reads their type.
+    """
+    try:
+        day = date_cls.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be in YYYY-MM-DD format")
+
+    day_start_naive = datetime.combine(day, datetime.min.time())
+    day_end_naive = day_start_naive + timedelta(days=1)
+
+    day_start_utc = day_start_naive.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+    day_end_utc = day_end_naive.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+
+    now = datetime.now(timezone.utc)
+    effective_end = min(day_end_utc, now)
+
+    apps_by_name: dict = {}
+    ATTRIBUTABLE_TYPES = ("ACTIVE", "IDLE")
+
+    if effective_end > day_start_utc:
+        sessions = (
+            db.query(UserSession)
+            .filter(
+                UserSession.device_id == device.id,
+                UserSession.login_time < day_end_naive,
+                or_(
+                    UserSession.logout_time.is_(None),
+                    UserSession.logout_time >= day_start_naive,
+                ),
+            )
+            .order_by(UserSession.login_time.asc())
+            .all()
+        )
+
+        for session in sessions:
+            # Same canonical segments TimelineService/Activity Details
+            # already build for this session/day -- not recomputed, not
+            # re-classified, just reused.
+            session_segments = TimelineService.build(db, session, day_start_utc, effective_end)
+
+            if not session_segments:
+                continue
+
+            applications = (
+                db.query(Application)
+                .filter(
+                    Application.device_id == device.id,
+                    Application.session_id == session.id,
+                )
+                .order_by(Application.start_time.asc())
+                .all()
+            )
+
+            for app in applications:
+                app_start = _normalize_application_timestamp(app.start_time)
+                app_end = (
+                    _normalize_application_timestamp(app.end_time)
+                    if app.end_time
+                    else now
+                )
+
+                if not app_start or app_end <= app_start:
+                    continue
+
+                name = app.application_name or "Unknown"
+
+                # One row per canonical ACTIVE/IDLE segment this record
+                # overlaps -- never a row for SLEEP_CONFIRMED/
+                # MONITORING_GAP/OFF_SESSION/NO_SESSION overlap, which is
+                # silently excluded here, exactly like
+                # TimelineService.overlap_seconds_by_type()'s existing
+                # ACTIVE/IDLE-only totals.
+                for seg in session_segments:
+                    if seg["type"] not in ATTRIBUTABLE_TYPES:
+                        continue
+
+                    ov_start = max(seg["start"], app_start)
+                    ov_end = min(seg["end"], app_end)
+                    if ov_end <= ov_start:
+                        continue
+
+                    bucket = apps_by_name.setdefault(
+                        name,
+                        {
+                            "application": name,
+                            "active_seconds": 0,
+                            "idle_seconds": 0,
+                            "intervals": [],
+                        },
+                    )
+
+                    duration_seconds = int((ov_end - ov_start).total_seconds())
+                    status = seg["type"]  # "ACTIVE" or "IDLE"
+
+                    bucket["intervals"].append(
+                        ApplicationInterval(
+                            start=ov_start,
+                            end=ov_end,
+                            status=status,
+                            duration_seconds=duration_seconds,
+                        )
+                    )
+                    if status == "ACTIVE":
+                        bucket["active_seconds"] += duration_seconds
+                    else:
+                        bucket["idle_seconds"] += duration_seconds
+
+    applications_out = []
+    for bucket in apps_by_name.values():
+        bucket["intervals"].sort(key=lambda iv: iv.start)
+        applications_out.append(
+            ApplicationUsageDetail(
+                application=bucket["application"],
+                active_seconds=bucket["active_seconds"],
+                idle_seconds=bucket["idle_seconds"],
+                total_seconds=bucket["active_seconds"] + bucket["idle_seconds"],
+                intervals=bucket["intervals"],
+            )
+        )
+
+    applications_out.sort(key=lambda a: a.active_seconds, reverse=True)
+
+    return ApplicationDrilldownResponse(
+        device_id=device.id,
+        hostname=device.hostname,
+        date=date_str,
+        applications=applications_out,
+    )
+
+
+@router.get(
+    "/api/device/{device_id}/applications",
+    response_model=ApplicationDrilldownResponse,
+)
+def device_applications(
+    device_id: int,
+    date: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_dashboard_read),
+):
+    device = db.query(Device).filter(Device.id == device_id).first()
+
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    return _build_day_application_summary(db, device, date)

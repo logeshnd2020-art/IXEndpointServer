@@ -1,27 +1,44 @@
 /**
  * Reusable 24-hour activity timeline renderer.
  *
- * Renders segments (ACTIVE / IDLE / SLEEP_GAP / NO_SESSION, from the
- * /api/device/{id}/timeline?date=... endpoint) positioned on a fixed
- * 24-hour axis anchored to the day's own start (window_start). Any
- * uncovered time is left as empty track background -- this only happens
- * for "today", where the server truncates the window at "now" rather
- * than fabricating data for the future.
+ * Renders segments (ACTIVE / IDLE / SLEEP_CONFIRMED / MONITORING_GAP /
+ * OFF_SESSION / NO_SESSION, from the /api/device/{id}/timeline?date=...
+ * endpoint) positioned on a fixed 24-hour axis anchored to the day's own
+ * start (window_start). Any uncovered time is left as empty track
+ * background -- this only happens for "today", where the server
+ * truncates the window at "now" rather than fabricating data for the
+ * future.
+ *
+ * SLEEP_CONFIRMED means genuine sleep/power-state evidence was found --
+ * currently never produced (no agent version sends such a signal yet), so
+ * it will not appear in real data today, but is rendered/labeled here for
+ * when it becomes available. MONITORING_GAP means monitoring evidence
+ * (heartbeats) disappeared for a bounded stretch with the cause unknown --
+ * it must NEVER be labeled "Sleep": that would overclaim evidence the
+ * server doesn't have. OFF_SESSION is the server's best-available
+ * inference (from heartbeat evidence, never clock time) that a stretch
+ * represents the boundary between two separate periods of engagement.
  */
 const IXTimeline = (() => {
 
     const LEGEND = [
         { type: "ACTIVE", label: "Active", swatchClass: "ix-timeline-seg-ACTIVE" },
         { type: "IDLE", label: "Idle", swatchClass: "ix-timeline-seg-IDLE" },
-        { type: "SLEEP_GAP", label: "Sleep / Gap", swatchClass: "ix-timeline-seg-SLEEP_GAP" },
+        { type: "SLEEP_CONFIRMED", label: "Sleep", swatchClass: "ix-timeline-seg-SLEEP_CONFIRMED" },
+        { type: "MONITORING_GAP", label: "Monitoring Gap", swatchClass: "ix-timeline-seg-MONITORING_GAP" },
+        { type: "OFF_SESSION", label: "Off Session", swatchClass: "ix-timeline-seg-OFF_SESSION" },
     ];
 
     // Human-readable label per raw segment type, shared by the timeline
     // bar's tooltip and the Activity Details list so both always agree.
+    // MONITORING_GAP is deliberately NOT labeled "Sleep" -- see file
+    // docstring above.
     const TYPE_LABEL = {
         ACTIVE: "Active",
         IDLE: "Idle",
-        SLEEP_GAP: "Sleep",
+        SLEEP_CONFIRMED: "Sleep",
+        MONITORING_GAP: "Monitoring Gap",
+        OFF_SESSION: "Off Session",
         NO_SESSION: "No Session",
     };
 

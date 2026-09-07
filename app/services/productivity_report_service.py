@@ -228,7 +228,14 @@ class ProductivityReportService:
                         user_totals[username] = {
                             "working_seconds": 0,
                             "idle_seconds": 0,
+                            # SLEEP_CONFIRMED total only -- see
+                            # ProductivityService for why this is
+                            # deliberately not "every kind of unobserved
+                            # time". Always 0 today (no sleep-evidence
+                            # signal exists yet).
                             "sleep_seconds": 0,
+                            "monitoring_gap_seconds": 0,
+                            "off_session_seconds": 0,
                             "applications": {},
                         }
 
@@ -266,7 +273,15 @@ class ProductivityReportService:
 
                     aggregate[
                         "sleep_seconds"
-                    ] += segment_totals.get("SLEEP_GAP", 0)
+                    ] += segment_totals.get("SLEEP_CONFIRMED", 0)
+
+                    aggregate[
+                        "monitoring_gap_seconds"
+                    ] += segment_totals.get("MONITORING_GAP", 0)
+
+                    aggregate[
+                        "off_session_seconds"
+                    ] += segment_totals.get("OFF_SESSION", 0)
 
                     aggregate[
                         "idle_seconds"
@@ -438,6 +453,12 @@ class ProductivityReportService:
 
                             "sleep_seconds":
                                 aggregate["sleep_seconds"],
+
+                            "monitoring_gap_seconds":
+                                aggregate["monitoring_gap_seconds"],
+
+                            "off_session_seconds":
+                                aggregate["off_session_seconds"],
 
                             "productivity_percent":
                                 productivity,

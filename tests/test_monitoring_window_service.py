@@ -10,6 +10,16 @@ KOLKATA = ZoneInfo("Asia/Kolkata")
 
 
 def _heartbeat(device, ts):
+    # Real device_heartbeats.timestamp values are always naive, representing
+    # Asia/Kolkata wall-clock time (see MonitoringWindowService's own
+    # CLIENT_LOCAL_TZ docstring) -- never UTC. A test that builds `ts` via
+    # the tz-aware `utc()` helper (for readability of the *instant* under
+    # test) must still be stored the same way real heartbeats are: convert
+    # to its naive local-wall-clock equivalent first. Naive `ts` values
+    # (already representing IST) pass through unchanged.
+    if ts.tzinfo is not None:
+        ts = ts.astimezone(KOLKATA).replace(tzinfo=None)
+
     return DeviceHeartbeat(
         device_id=device.id,
         cpu_usage=10.0,
@@ -192,6 +202,62 @@ def test_get_segments_anchors_sleep_gap_correctly_for_naive_ist_heartbeats(db_se
     boundaries = {b for seg in segments for b in seg[:2]}
     assert buggy_gap_start not in boundaries
     assert buggy_gap_end not in boundaries
+
+
+def test_in_progress_gap_before_window_is_not_defaulted_to_monitored(db_session, device):
+    """
+    Regression test for the real IXMAC007 false-Active incident: a live
+    "today so far" query made during an in-progress overnight gap -- where
+    the only heartbeat evidence is BEFORE window_start, and none exists
+    inside the window itself -- must correctly report monitored=False for
+    the whole window, not silently default to True. Exact real-data shape:
+    last heartbeat 2026-09-03 18:46:39, next real heartbeat not until
+    2026-09-04 10:29:01 -- querying the elapsed portion of the new day
+    (00:00-00:16) live, before that morning's heartbeats exist, must not
+    report it as monitored.
+    """
+    db_session.add(_heartbeat(device, datetime(2026, 9, 3, 18, 46, 39)))
+    db_session.commit()
+
+    window_start = utc(2026, 9, 3, 18, 30, 0)  # 2026-09-04 00:00 IST
+    window_end = utc(2026, 9, 3, 18, 46, 0)  # 2026-09-04 00:16 IST
+
+    segments = MonitoringWindowService.get_segments(db_session, device.id, window_start, window_end)
+
+    assert segments == [(window_start, window_end, False)]
+
+
+def test_prior_heartbeat_recent_enough_still_defaults_to_monitored(db_session, device):
+    """
+    The fix must not become over-eager: a heartbeat shortly before
+    window_start that does NOT yet imply a real gap by window_end must
+    not falsely trigger the not-monitored fallback -- only an
+    already-overdue gap does.
+    """
+    db_session.add(_heartbeat(device, utc(2026, 9, 1, 8, 59, 0)))  # 60s before window_start
+    db_session.commit()
+
+    window_start = utc(2026, 9, 1, 9, 0, 0)
+    window_end = window_start + timedelta(minutes=1)
+
+    segments = MonitoringWindowService.get_segments(db_session, device.id, window_start, window_end)
+
+    assert segments == [(window_start, window_end, True)]
+
+
+def test_no_heartbeat_evidence_at_all_still_defaults_to_monitored(db_session, device):
+    """
+    The fix must not affect the case where NO heartbeat evidence exists
+    at all for this device -- not even before window_start (e.g. a
+    pre-heartbeat-era session, or a brand new device). That case still
+    defaults to fully monitored, exactly as before.
+    """
+    window_start = utc(2026, 9, 4, 0, 0, 0)
+    window_end = utc(2026, 9, 4, 0, 16, 0)
+
+    segments = MonitoringWindowService.get_segments(db_session, device.id, window_start, window_end)
+
+    assert segments == [(window_start, window_end, True)]
 
 
 def test_gap_below_threshold_is_still_monitored(db_session, device):

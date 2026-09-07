@@ -111,7 +111,14 @@
                             <div class="ix-kpi-card">
                                 <div class="ix-kpi-label">Sleep</div>
                                 <div class="ix-kpi-value" style="color: var(--ix-sleep);" id="kpiSleep">-</div>
-                                <div class="ix-kpi-note">Excluded from monitored time</div>
+                                <div class="ix-kpi-note">Confirmed sleep evidence only</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="ix-kpi-card">
+                                <div class="ix-kpi-label">Off Session</div>
+                                <div class="ix-kpi-value" style="color: var(--ix-text-faint);" id="kpiOffSession">-</div>
+                                <div class="ix-kpi-note">Inferred break between work periods</div>
                             </div>
                         </div>
                         <div class="col-6 col-xl">
@@ -183,6 +190,7 @@
                                         <th>Active</th>
                                         <th>Idle</th>
                                         <th>Sleep</th>
+                                        <th>Off Session</th>
                                         <th>Productivity</th>
                                     </tr>
                                 </thead>
@@ -272,6 +280,8 @@
         const deviceId = window.location.pathname.split("/").filter(Boolean).pop();
         let currentDevice = null;
         let currentPeriodDates = []; // ["2026-09-01", ...] every calendar day in the selected range
+        let currentSelectedDay = null; // the single day the application drill-down expands against
+        let expandedApplication = null; // name of the currently-expanded application row, if any
 
         // ---------- Tabs ----------
         document.querySelectorAll(".ix-tab").forEach(tab => {
@@ -342,7 +352,16 @@
                 if (!byDate[row.period_start]) {
                     byDate[row.period_start] = {
                         period_start: row.period_start,
-                        working_seconds: 0, idle_seconds: 0, active_seconds: 0, sleep_seconds: 0,
+                        working_seconds: 0, idle_seconds: 0, active_seconds: 0,
+                        // sleep_seconds is SLEEP_CONFIRMED only -- currently
+                        // always 0 (no agent version sends sleep evidence
+                        // yet). off_session_seconds/monitoring_gap_seconds
+                        // are reported separately -- never folded into
+                        // "Sleep", which would overclaim evidence that
+                        // doesn't exist. See WorkSessionClassifier.
+                        sleep_seconds: 0,
+                        monitoring_gap_seconds: 0,
+                        off_session_seconds: 0,
                         applications: {},
                     };
                 }
@@ -351,6 +370,8 @@
                 agg.idle_seconds += row.idle_seconds;
                 agg.active_seconds += row.active_seconds;
                 agg.sleep_seconds += row.sleep_seconds;
+                agg.monitoring_gap_seconds += row.monitoring_gap_seconds || 0;
+                agg.off_session_seconds += row.off_session_seconds || 0;
                 for (const app of row.applications) {
                     if (!agg.applications[app.application]) {
                         agg.applications[app.application] = { application: app.application, elapsed_seconds: 0, idle_seconds: 0, active_seconds: 0 };
@@ -371,6 +392,7 @@
             document.getElementById("kpiActive").textContent = IXFormat.duration(totals.active_seconds);
             document.getElementById("kpiIdle").textContent = IXFormat.duration(totals.idle_seconds);
             document.getElementById("kpiSleep").textContent = IXFormat.duration(totals.sleep_seconds);
+            document.getElementById("kpiOffSession").textContent = IXFormat.duration(totals.off_session_seconds || 0);
             document.getElementById("kpiProductivity").textContent = IXFormat.pct(productivityPct);
             document.getElementById("kpiMonitored").textContent = IXFormat.duration(monitored);
 
@@ -400,8 +422,15 @@
                 </div>
             `).join("") : `<div class="text-muted small">No application usage recorded for this period.</div>`;
 
+            // Each row is clickable to expand a Start/End/Status/Duration
+            // drill-down for the currently-selected single day, fetched
+            // from /api/device/{id}/applications?date=... -- a strict
+            // downstream attribution layer over the same canonical
+            // segments Activity Details already uses (see
+            // _build_day_application_summary), never an independent
+            // Active/Idle computation.
             document.getElementById("appTable").innerHTML = apps.length ? apps.map(a => `
-                <div class="ix-app-row">
+                <div class="ix-app-row ix-app-row-clickable" data-app-name="${a.application}" role="button" tabindex="0">
                     <div class="ix-app-icon">${IXAppIcons.iconHtml(a.application)}</div>
                     <div class="flex-grow-1">
                         <div class="ix-app-name">${a.application}</div>
@@ -412,7 +441,74 @@
                         </div>
                     </div>
                 </div>
+                <div class="ix-app-drilldown" id="drilldown-${cssEscape(a.application)}" style="display:none;"></div>
             `).join("") : `<div class="text-muted small">No application usage recorded for this period.</div>`;
+
+            document.querySelectorAll(".ix-app-row-clickable").forEach(row => {
+                row.addEventListener("click", () => toggleApplicationDrilldown(row.dataset.appName));
+            });
+        }
+
+        function cssEscape(name) {
+            return String(name).replace(/[^a-zA-Z0-9_-]/g, "_");
+        }
+
+        async function toggleApplicationDrilldown(appName) {
+            const target = document.getElementById(`drilldown-${cssEscape(appName)}`);
+            if (!target) return;
+
+            if (expandedApplication === appName) {
+                target.style.display = "none";
+                expandedApplication = null;
+                return;
+            }
+
+            // Collapse any other open drilldown first.
+            if (expandedApplication) {
+                const prev = document.getElementById(`drilldown-${cssEscape(expandedApplication)}`);
+                if (prev) prev.style.display = "none";
+            }
+            expandedApplication = appName;
+
+            if (!currentSelectedDay) {
+                target.innerHTML = `<div class="text-muted small p-2">Select a day to view application intervals.</div>`;
+                target.style.display = "block";
+                return;
+            }
+
+            target.innerHTML = `<div class="text-muted small p-2">Loading...</div>`;
+            target.style.display = "block";
+
+            const res = await IXAuth.authFetch(`/api/device/${deviceId}/applications?date=${currentSelectedDay}`);
+            if (!res.ok) {
+                target.innerHTML = `<div class="text-muted small p-2">No interval data available for this day.</div>`;
+                return;
+            }
+            const data = await res.json();
+            const appData = (data.applications || []).find(a => a.application === appName);
+
+            if (!appData || !appData.intervals.length) {
+                target.innerHTML = `<div class="text-muted small p-2">No intervals recorded for ${IXFormat.date(currentSelectedDay)}.</div>`;
+                return;
+            }
+
+            target.innerHTML = `
+                <table class="ix-table ix-table-sm mb-0">
+                    <thead>
+                        <tr><th>Start Time</th><th>End Time</th><th>Status</th><th>Duration</th></tr>
+                    </thead>
+                    <tbody>
+                        ${appData.intervals.map(iv => `
+                            <tr>
+                                <td>${IXFormat.time(iv.start)}</td>
+                                <td>${IXFormat.time(iv.end)}</td>
+                                <td>${iv.status}</td>
+                                <td>${IXFormat.duration(iv.duration_seconds)}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            `;
         }
 
         function renderPeriodSummary(byDate, allDates) {
@@ -429,7 +525,7 @@
             document.getElementById("periodSummaryBody").innerHTML = rows.map((row, i) => {
                 if (!row) {
                     return `<tr class="text-muted"><td>${IXFormat.date(allDates[i])}</td>
-                        <td colspan="5">Not Available</td></tr>`;
+                        <td colspan="6">Not Available</td></tr>`;
                 }
                 const pct = row.working_seconds > 0 ? (row.active_seconds / row.working_seconds) * 100 : 0;
                 return `<tr>
@@ -438,6 +534,7 @@
                     <td>${IXFormat.duration(row.active_seconds)}</td>
                     <td>${IXFormat.duration(row.idle_seconds)}</td>
                     <td>${IXFormat.duration(row.sleep_seconds)}</td>
+                    <td>${IXFormat.duration(row.off_session_seconds || 0)}</td>
                     <td>${IXFormat.pct(pct)}</td>
                 </tr>`;
             }).join("");
@@ -508,6 +605,9 @@
         }
 
         async function loadTimelineForDay(day) {
+            currentSelectedDay = day;
+            expandedApplication = null; // any open drilldown belonged to the previous day's data
+
             const timelineEl = document.getElementById("timelineContainer");
             const res = await IXAuth.authFetch(`/api/device/${deviceId}/timeline?date=${day}`);
             if (!res.ok) {
@@ -528,12 +628,18 @@
             const reports = await fetchReportRange(start_date, end_date);
             const byDate = aggregateByDate(reports);
 
-            const totals = { working_seconds: 0, idle_seconds: 0, active_seconds: 0, sleep_seconds: 0, applications: {} };
+            const totals = {
+                working_seconds: 0, idle_seconds: 0, active_seconds: 0,
+                sleep_seconds: 0, monitoring_gap_seconds: 0, off_session_seconds: 0,
+                applications: {},
+            };
             for (const day of Object.values(byDate)) {
                 totals.working_seconds += day.working_seconds;
                 totals.idle_seconds += day.idle_seconds;
                 totals.active_seconds += day.active_seconds;
                 totals.sleep_seconds += day.sleep_seconds;
+                totals.monitoring_gap_seconds += day.monitoring_gap_seconds || 0;
+                totals.off_session_seconds += day.off_session_seconds || 0;
                 for (const [name, app] of Object.entries(day.applications)) {
                     if (!totals.applications[name]) {
                         totals.applications[name] = { application: name, elapsed_seconds: 0, idle_seconds: 0, active_seconds: 0 };
